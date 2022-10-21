@@ -119,7 +119,9 @@ def test_generate_training_files_with_untimed_annotation(
     assert audio == audio_file
 
     with open(transcription) as f:
-        assert Annotation.from_dict(json.load(f)) == untimed_annotation
+        annotation = Annotation.from_dict(json.load(f))
+        assert annotation.audio_file == audio
+        assert annotation.transcript == untimed_annotation.transcript
 
 
 def test_generate_training_files_with_untimed_annotation_and_copy(
@@ -147,7 +149,9 @@ def test_generate_training_files_with_untimed_annotation_and_copy(
     assert audio.name == output_audio_file.name
 
     with open(transcription) as f:
-        assert Annotation.from_dict(json.load(f)) == untimed_annotation
+        annotation = Annotation.from_dict(json.load(f))
+        assert annotation.audio_file == audio
+        assert annotation.transcript == untimed_annotation.transcript
 
 
 def test_generate_training_files_with_timed_annotation(
@@ -165,7 +169,9 @@ def test_generate_training_files_with_timed_annotation(
     assert audio == tmp_path / f"test_{timed_annotation.start_ms}.wav"
 
     with open(transcription) as f:
-        assert Annotation.from_dict(json.load(f)) == timed_annotation
+        annotation = Annotation.from_dict(json.load(f))
+        assert annotation.audio_file == audio
+        assert annotation.transcript == timed_annotation.transcript
 
 
 def test_has_finished_processing():

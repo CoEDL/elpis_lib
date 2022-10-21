@@ -11,7 +11,10 @@ from elpis.trainer.job import TrainingJob
 
 
 def train(
-    job: TrainingJob, output_dir: Path, dataset_dir: Path, cache_dir: Path
+    job: TrainingJob,
+    output_dir: Path,
+    dataset_dir: Path,
+    cache_dir: Path,
 ) -> Path:
     """Trains a model for use in transcription.
 

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from transformers import AutomaticSpeechRecognitionPipeline as ASRPipeline
 from transformers import AutoModelForCTC, AutoProcessor, pipeline
@@ -11,7 +11,9 @@ TASK = "automatic-speech-recognition"
 
 
 def build_pipeline(
-    pretrained_location: str, cache_dir: Path = CACHE_DIR
+    pretrained_location: str,
+    processor_location: Optional[str] = None,
+    cache_dir: Path = CACHE_DIR,
 ) -> ASRPipeline:
     """Builds the pipeline from the supplied pretrained location.
 
@@ -23,8 +25,11 @@ def build_pipeline(
     Returns:
         A pipeline to be used for asr.
     """
+    if processor_location is None:
+        processor_location = pretrained_location
+
     model = AutoModelForCTC.from_pretrained(pretrained_location, cache_dir=cache_dir)
-    processor = AutoProcessor.from_pretrained(pretrained_location, cache_dir=cache_dir)
+    processor = AutoProcessor.from_pretrained(processor_location, cache_dir=cache_dir)
 
     return pipeline(
         task=TASK,
@@ -64,11 +69,11 @@ def annotation_from_chunk(chunk: Dict[str, Any], audio_file: Path) -> Annotation
         The corresponding annotation.
     """
     text = chunk["text"]
-    start, stop = chunk["timestamps"]
+    start, stop = chunk["timestamp"]
 
     return Annotation(
         transcript=text,
-        start_ms=start * 1000,
-        stop_ms=stop * 1000,
+        start_ms=int(start * 1000),
+        stop_ms=int(stop * 1000) + 1,
         audio_file=audio_file,
     )

@@ -99,13 +99,7 @@ def generate_training_files(
     if annotation.start_ms is not None:
         name = f"{name}_{annotation.start_ms}"
 
-    # Save transcription_file
-    transcription_file = output_dir / f"{name}.json"
-    with open(transcription_file, "w") as f:
-        json.dump(annotation.to_dict(), f)
-
     # Save audio file.
-    # Type ignoring is because is_timed ensures sample_rate, start_ms and stop_ms exist
     if annotation.is_timed():
         cut_audio_file = output_dir / f"{name}.wav"
         audio.cut(
@@ -127,6 +121,14 @@ def generate_training_files(
         destination=audio_file,
         sample_rate=TARGET_SAMPLE_RATE,
     )
+
+    # Save gimped transcription_file
+    next_annotation = Annotation(
+        audio_file=audio_file, transcript=annotation.transcript
+    )
+    transcription_file = output_dir / f"{name}.json"
+    with open(transcription_file, "w") as f:
+        json.dump(next_annotation.to_dict(), f)
 
     return transcription_file, audio_file
 
