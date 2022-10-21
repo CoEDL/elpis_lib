@@ -1,0 +1,63 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ANNOTATION_DOCUMENT AUTHOR="" DATE="2017-07-06T13:37:19+10:00" VERSION="2.8" FORMAT="2.8" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.mpi.nl/tools/elan/EAFv2.8.xsd">
+	<HEADER MEDIA_FILE="" TIME_UNITS="milliseconds">
+		<MEDIA_DESCRIPTOR MEDIA_URL="file:///Users/neinheim/Documents/GitHub/asr-daan/toy_corpus/data/1_1_4.wav" MIME_TYPE="audio/x-wav" RELATIVE_MEDIA_URL="./1_1_4.wav" />
+		<PROPERTY NAME="URN">urn:nl-mpi-tools-elan-eaf:269a144c-5adb-4b5e-b1b7-ea19b2e8ee04</PROPERTY>
+		<PROPERTY NAME="lastUsedAnnotationId">2</PROPERTY>
+		</HEADER>
+	<TIME_ORDER>
+		<TIME_SLOT TIME_SLOT_ID="ts1" TIME_VALUE="660" />
+		<TIME_SLOT TIME_SLOT_ID="ts2" TIME_VALUE="2570" />
+		<TIME_SLOT TIME_SLOT_ID="ts3" TIME_VALUE="3950" />
+		<TIME_SLOT TIME_SLOT_ID="ts4" TIME_VALUE="6040" />
+		<TIME_SLOT TIME_SLOT_ID="ts5" TIME_VALUE="930" />
+		<TIME_SLOT TIME_SLOT_ID="ts6" TIME_VALUE="2526" />
+		<TIME_SLOT TIME_SLOT_ID="ts7" TIME_VALUE="4098" />
+		<TIME_SLOT TIME_SLOT_ID="ts8" TIME_VALUE="5886" />
+		<TIME_SLOT TIME_SLOT_ID="ts9" TIME_VALUE="930" />
+		<TIME_SLOT TIME_SLOT_ID="ts10" TIME_VALUE="2526" />
+		<TIME_SLOT TIME_SLOT_ID="ts11" TIME_VALUE="4098" />
+		<TIME_SLOT TIME_SLOT_ID="ts12" TIME_VALUE="5886" />
+		</TIME_ORDER>
+	<TIER LINGUISTIC_TYPE_REF="default-lt" PARTICIPANT="SL" TIER_ID="Phrase">
+		<ANNOTATION>
+			<ALIGNABLE_ANNOTATION ANNOTATION_ID="a1" TIME_SLOT_REF1="ts1" TIME_SLOT_REF2="ts2">
+				<ANNOTATION_VALUE>hekaai deina del ong hayei ba</ANNOTATION_VALUE>
+				</ALIGNABLE_ANNOTATION>
+			</ANNOTATION>
+		<ANNOTATION>
+			<ALIGNABLE_ANNOTATION ANNOTATION_ID="a2" TIME_SLOT_REF1="ts3" TIME_SLOT_REF2="ts4">
+				<ANNOTATION_VALUE>hepikaai deina botol homi dong yaari</ANNOTATION_VALUE>
+				</ALIGNABLE_ANNOTATION>
+			</ANNOTATION>
+		</TIER>
+	<TIER TIER_ID="_vad" LINGUISTIC_TYPE_REF="default-lt">
+		<ANNOTATION>
+			<ALIGNABLE_ANNOTATION ANNOTATION_ID="a3" TIME_SLOT_REF1="ts5" TIME_SLOT_REF2="ts6">
+				<ANNOTATION_VALUE />
+				</ALIGNABLE_ANNOTATION>
+			</ANNOTATION>
+		<ANNOTATION>
+			<ALIGNABLE_ANNOTATION ANNOTATION_ID="a4" TIME_SLOT_REF1="ts7" TIME_SLOT_REF2="ts8">
+				<ANNOTATION_VALUE />
+				</ALIGNABLE_ANNOTATION>
+			</ANNOTATION>
+		</TIER>
+	<TIER TIER_ID="vad_phrase" LINGUISTIC_TYPE_REF="default-lt">
+		<ANNOTATION>
+			<ALIGNABLE_ANNOTATION ANNOTATION_ID="a5" TIME_SLOT_REF1="ts9" TIME_SLOT_REF2="ts10">
+				<ANNOTATION_VALUE>hekaai deina del ong hayei ba</ANNOTATION_VALUE>
+				</ALIGNABLE_ANNOTATION>
+			</ANNOTATION>
+		<ANNOTATION>
+			<ALIGNABLE_ANNOTATION ANNOTATION_ID="a6" TIME_SLOT_REF1="ts11" TIME_SLOT_REF2="ts12">
+				<ANNOTATION_VALUE>hepikaai deina botol homi dong yaari</ANNOTATION_VALUE>
+				</ALIGNABLE_ANNOTATION>
+			</ANNOTATION>
+		</TIER>
+	<LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="default-lt" TIME_ALIGNABLE="true" />
+	<CONSTRAINT STEREOTYPE="Time_Subdivision" DESCRIPTION="Time subdivision of parent annotation's time interval, no time gaps allowed within this interval" />
+	<CONSTRAINT STEREOTYPE="Symbolic_Subdivision" DESCRIPTION="Symbolic subdivision of a parent annotation. Annotations refering to the same parent are ordered" />
+	<CONSTRAINT STEREOTYPE="Symbolic_Association" DESCRIPTION="1-1 association with a parent annotation" />
+	<CONSTRAINT STEREOTYPE="Included_In" DESCRIPTION="Time alignable annotations within the parent annotation's time interval, gaps are allowed" />
+	</ANNOTATION_DOCUMENT>
