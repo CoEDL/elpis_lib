@@ -126,7 +126,7 @@ def test_duplicate_files():
 
 def test_dataset_batching():
     dataset = Dataset.from_dict(DATASET_DICT)
-    batch = dataset.to_batch()
+    batch = dataset.to_batches()
     assert len(batch) == 1
     job = batch[0]
     transcript_file, audio_file = to_paths(FILES_WITH_ELAN)

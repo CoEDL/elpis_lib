@@ -153,7 +153,7 @@ class Dataset:
             elan_options=elan_options,
         )
 
-    def to_batch(self) -> List[ProcessingBatch]:
+    def to_batches(self) -> List[ProcessingBatch]:
         """Converts a valid dataset to a list of processing jobs, matching
         transcript and audio files.
         """

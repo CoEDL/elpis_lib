@@ -58,6 +58,7 @@ def train(
     logger.info(f"Saving model @ {output_dir}")
     trainer.save_model()
     trainer.save_state()
+    processor.save_pretrained(output_dir)
     logger.info(f"Model written to disk.")
     return output_dir
 
