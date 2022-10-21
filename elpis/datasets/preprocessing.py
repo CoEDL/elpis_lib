@@ -34,14 +34,6 @@ def process_batch(
     annotations = extract_annotations(
         transcription_file=batch.transcription_file, elan_options=batch.elan_options
     )
-    logger.info(f"Annotations: {annotations}")
-
-    # Resample audio to standardise for training
-    audio.resample(
-        audio_path=batch.audio_file,
-        destination=batch.audio_file,
-        sample_rate=TARGET_SAMPLE_RATE,
-    )
 
     annotations = map(
         lambda annotation: clean_annotation(annotation, batch.cleaning_options),
@@ -127,6 +119,14 @@ def generate_training_files(
         # Make sure we're putting the audio file in the output dir
         if audio_file.parent != output_dir:
             shutil.copy(str(audio_file), str(output_dir / audio_file.name))
+            audio_file = output_dir / audio_file.name
+
+    # Resample audio to standardise for training
+    audio.resample(
+        audio_path=audio_file,
+        destination=audio_file,
+        sample_rate=TARGET_SAMPLE_RATE,
+    )
 
     return transcription_file, audio_file
 

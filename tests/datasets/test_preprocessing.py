@@ -2,8 +2,11 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from elpis.datasets import CleaningOptions, ProcessingBatch
 from elpis.datasets.preprocessing import (
+    TARGET_SAMPLE_RATE,
     clean_annotation,
     generate_training_files,
     has_finished_processing,
@@ -12,17 +15,15 @@ from elpis.datasets.preprocessing import (
 from elpis.models import Annotation
 from elpis.models.elan_options import ElanOptions, ElanTierSelector
 
-TEST_ANNOTATION = Annotation(audio_file=Path("test.wav"), transcript="hi")
+ABUI_DATASET_FILES = ["abui_1.eaf", "abui_1.wav", "abui_2.eaf", "abui_2.wav"]
+DATA_PATH = Path(__file__).parent.parent / "data"
+
 TEST_ANNOTATION_TIMED = Annotation(
-    audio_file=Path("test.wav"),
+    audio_file=DATA_PATH / "test.wav",
     transcript="hi",
     start_ms=0,
     stop_ms=1000,
 )
-
-
-ABUI_DATASET_FILES = ["abui_1.eaf", "abui_1.wav", "abui_2.eaf", "abui_2.wav"]
-DATA_PATH = Path(__file__).parent.parent / "data"
 
 BATCH = ProcessingBatch(
     transcription_file=DATA_PATH / "abui_4.eaf",
@@ -32,7 +33,6 @@ BATCH = ProcessingBatch(
         selection_mechanism=ElanTierSelector.NAME, selection_value="Phrase"
     ),
 )
-
 TEXT_BATCH = ProcessingBatch(
     transcription_file=DATA_PATH / "oily_rag.txt",
     audio_file=DATA_PATH / "oily_rag.wav",
@@ -53,67 +53,119 @@ def test_process_text_batch(tmp_path: Path):
     assert len(files) == 2
 
 
-def test_clean_annotation(mocker):
-    cleaner_mock: Mock = mocker.patch("elpis.datasets.preprocessing.clean_text")
-    cleaner_mock.return_value = "wow"
+@pytest.fixture()
+def untimed_annotation(tmp_path: Path) -> Annotation:
+    return Annotation(audio_file=tmp_path / "test.wav", transcript="hi")
 
-    result = clean_annotation(TEST_ANNOTATION, CleaningOptions())
-    cleaner_mock.assert_called_once()
+
+@pytest.fixture()
+def timed_annotation(tmp_path: Path) -> Annotation:
+    return Annotation(
+        audio_file=tmp_path / "test.wav",
+        transcript="hi",
+        start_ms=0,
+        stop_ms=1000,
+    )
+
+
+@pytest.fixture()
+def cleaner(mocker) -> Mock:
+    return mocker.patch("elpis.datasets.preprocessing.clean_text")
+
+
+@pytest.fixture()
+def cutter(mocker) -> Mock:
+    return mocker.patch("elpis.datasets.preprocessing.audio.cut")
+
+
+@pytest.fixture()
+def resampler(mocker) -> Mock:
+    return mocker.patch("elpis.datasets.preprocessing.audio.resample")
+
+
+@pytest.fixture()
+def copier(mocker) -> Mock:
+    return mocker.patch("elpis.datasets.preprocessing.shutil.copy")
+
+
+def test_clean_annotation(cleaner: Mock, untimed_annotation: Annotation):
+    cleaner.return_value = "wow"
+
+    result = clean_annotation(untimed_annotation, CleaningOptions())
+    cleaner.assert_called_once()
     assert result.transcript == "wow"
-    assert TEST_ANNOTATION.transcript == "hi"
+    assert untimed_annotation.transcript == "hi"
 
 
-def test_generate_training_files_with_untimed_annotation(tmp_path: Path, mocker):
-    cut_mock: Mock = mocker.patch("elpis.datasets.preprocessing.audio.cut")
-    copy_mock: Mock = mocker.patch("elpis.datasets.preprocessing.shutil.copy")
-
+def test_generate_training_files_with_untimed_annotation(
+    tmp_path: Path,
+    copier: Mock,
+    cutter: Mock,
+    resampler: Mock,
+    untimed_annotation: Annotation,
+):
     audio_file = tmp_path / "test.wav"
-    annotation = Annotation(audio_file=audio_file, transcript="hey")
 
-    transcription, audio = generate_training_files(annotation, output_dir=tmp_path)
-    cut_mock.assert_not_called()
-    copy_mock.assert_not_called()
+    transcription, audio = generate_training_files(
+        untimed_annotation, output_dir=tmp_path
+    )
+    cutter.assert_not_called()
+    copier.assert_not_called()
+    resampler.assert_called_once_with(
+        audio_path=audio_file, destination=audio_file, sample_rate=TARGET_SAMPLE_RATE
+    )
 
     assert transcription == tmp_path / "test.json"
     assert audio == audio_file
 
     with open(transcription) as f:
-        assert Annotation.from_dict(json.load(f)) == annotation
+        assert Annotation.from_dict(json.load(f)) == untimed_annotation
 
 
 def test_generate_training_files_with_untimed_annotation_and_copy(
-    tmp_path: Path, mocker
+    tmp_path: Path,
+    cutter: Mock,
+    copier: Mock,
+    resampler: Mock,
+    untimed_annotation: Annotation,
 ):
-    cut_mock: Mock = mocker.patch("elpis.datasets.preprocessing.audio.cut")
-    copy_mock: Mock = mocker.patch("elpis.datasets.preprocessing.shutil.copy")
-
     audio_file = tmp_path / "test.wav"
     output_dir = tmp_path / "output"
     output_dir.mkdir()
+    output_audio_file = output_dir / audio_file.name
 
-    transcription, audio = generate_training_files(TEST_ANNOTATION, output_dir)
-    cut_mock.assert_not_called()
-    copy_mock.assert_called_once()
+    transcription, audio = generate_training_files(untimed_annotation, output_dir)
+    cutter.assert_not_called()
+    copier.assert_called_once()
+    resampler.assert_called_once_with(
+        audio_path=output_audio_file,
+        destination=output_audio_file,
+        sample_rate=TARGET_SAMPLE_RATE,
+    )
 
     assert transcription == output_dir / "test.json"
-    assert audio.name == (output_dir / audio_file.name).name
+    assert audio.name == output_audio_file.name
 
     with open(transcription) as f:
-        assert Annotation.from_dict(json.load(f)) == TEST_ANNOTATION
+        assert Annotation.from_dict(json.load(f)) == untimed_annotation
 
 
-def test_generate_training_files_with_timed_annotation(tmp_path: Path, mocker):
-    cut_mock: Mock = mocker.patch("elpis.datasets.preprocessing.audio.cut")
-    copy_mock: Mock = mocker.patch("elpis.datasets.preprocessing.shutil.copy")
-
-    transcription, audio = generate_training_files(TEST_ANNOTATION_TIMED, tmp_path)
-    cut_mock.assert_called_once()
-    copy_mock.assert_not_called()
-    assert transcription == tmp_path / f"test_{TEST_ANNOTATION_TIMED.start_ms}.json"
-    assert audio == tmp_path / f"test_{TEST_ANNOTATION_TIMED.start_ms}.wav"
+def test_generate_training_files_with_timed_annotation(
+    tmp_path: Path,
+    cutter: Mock,
+    copier: Mock,
+    resampler: Mock,
+    timed_annotation: Annotation,
+):
+    transcription, audio = generate_training_files(timed_annotation, tmp_path)
+    cutter.assert_called_once()
+    copier.assert_not_called()
+    resampler.assert_called_once()
+    assert transcription == tmp_path / f"test_{timed_annotation.start_ms}.json"
+    assert audio == tmp_path / f"test_{timed_annotation.start_ms}.wav"
 
     with open(transcription) as f:
-        assert Annotation.from_dict(json.load(f)) == TEST_ANNOTATION_TIMED
+        assert Annotation.from_dict(json.load(f)) == timed_annotation
 
 
 def test_has_finished_processing():
