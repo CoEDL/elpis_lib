@@ -1,3 +1,4 @@
-__version__ = "0.1.0"
+from elpis.trainer.job import TrainingJob, TrainingOptions, TrainingStatus
+from elpis.trainer.trainer import train
 
-from trainer.main import app
+__all__ = ["TrainingJob", "TrainingOptions", "TrainingStatus", "train"]

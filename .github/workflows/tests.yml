@@ -27,4 +27,4 @@ jobs:
           poetry install
       - name: Run pytest
         run: |
-          poetry run pytest -vv
+          poetry run pytest -vv -m "not integration"

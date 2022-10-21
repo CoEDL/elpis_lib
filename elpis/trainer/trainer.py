@@ -4,35 +4,35 @@ from typing import Dict, List, Union
 
 import torch
 from loguru import logger
-from trainer.dataset import create_dataset, prepare_dataset
-from trainer.model_metadata import TrainingJob
 from transformers import AutoModelForCTC, AutoProcessor, Trainer
 
+from elpis.datasets.processing import create_dataset, prepare_dataset
+from elpis.trainer.job import TrainingJob
 
-def train(metadata: TrainingJob, data_path: Path, dataset_path: Path) -> Path:
+
+def train(
+    job: TrainingJob, output_dir: Path, dataset_dir: Path, cache_dir: Path
+) -> Path:
     """Trains a model for use in transcription.
 
-    Saves the model to {data_path}/output.
-
     Parameters:
-        metadata: Metadata about the training job, e.g. training options.
-        data_path: A directory to use for temporary working files and models.
-        dataset_path: A directory containing the dataset to train with.
+        job: Info about the training job, e.g. training options.
+        output_dir: Where to save the trained model.
+        dataset_dir: A directory containing the preprocessed dataset to train with.
+        cache_dir: A directory to use for caching HFT downloads and datasets.
 
     Returns:
         A path to the folder containing the trained model.
     """
-    cache_dir = data_path / "cache"
-
     logger.info("Preparing Datasets...")
-    dataset = create_dataset(metadata, dataset_path, cache_dir)
-    processor = AutoProcessor.from_pretrained(metadata.base_model, cache_dir=cache_dir)
+    dataset = create_dataset(dataset_dir, cache_dir)
+    processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
     dataset = prepare_dataset(dataset, processor)
     logger.info("Finished Preparing Datasets")
 
     logger.info("Downloading pretrained model...")
     model = AutoModelForCTC.from_pretrained(
-        metadata.base_model,
+        job.base_model,
         cache_dir=cache_dir,
         ctc_loss_reduction="mean",
         pad_token_id=processor.tokenizer.pad_token_id,
@@ -40,12 +40,11 @@ def train(metadata: TrainingJob, data_path: Path, dataset_path: Path) -> Path:
     logger.info("Downloaded model.")
 
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-    output_path = data_path / "output"
-    output_path.mkdir(exist_ok=True, parents=True)
+    output_dir.mkdir(exist_ok=True, parents=True)
 
     trainer = Trainer(
         model=model,
-        args=metadata.to_training_args(output_path),
+        args=job.to_training_args(output_dir),
         train_dataset=dataset["train"],
         eval_dataset=dataset["test"],
         tokenizer=processor.feature_extractor,
@@ -56,11 +55,11 @@ def train(metadata: TrainingJob, data_path: Path, dataset_path: Path) -> Path:
     trainer.train()
     logger.info(f"Finished training!")
 
-    logger.info(f"Saving model @ {output_path}")
+    logger.info(f"Saving model @ {output_dir}")
     trainer.save_model()
     trainer.save_state()
     logger.info(f"Model written to disk.")
-    return output_path
+    return output_dir
 
 
 @dataclass
