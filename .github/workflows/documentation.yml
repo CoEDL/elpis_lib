@@ -20,7 +20,7 @@ jobs:
         run: pip install pdoc3
 
       - name: Build documentation
-        run: pdoc --html --output_dir out elpis
+        run: pdoc --html --output-dir out elpis
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
