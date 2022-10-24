@@ -24,11 +24,8 @@ def test_training(tmp_path: Path):
     output_dir = tmp_path / "out"
     output_dir.mkdir(exist_ok=True, parents=True)
 
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir(exist_ok=True, parents=True)
-
     for file in os.listdir(DATASET_PATH):
         shutil.copy(DATASET_PATH / file, dataset_dir)
 
-    model_path = train(JOB, output_dir, dataset_dir, cache_dir)
+    model_path = train(job=JOB, output_dir=output_dir, dataset_dir=dataset_dir)
     assert model_path == output_dir

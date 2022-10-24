@@ -11,7 +11,14 @@ AUDIO = DATA_DIR / "oily_rag.wav"
 
 
 @mark.integration
-def test_standalone_inference(tmp_path: Path):
-    pipeline = build_pipeline(BASE_MODEL, cache_dir=tmp_path)
+def test_standalone_inference():
+    pipeline = build_pipeline(BASE_MODEL)
     preds = pipeline(str(AUDIO), return_timestamps="word")
     logger.info(preds)
+
+
+@mark.integration
+def test_transcribe():
+    pipeline = build_pipeline(BASE_MODEL)
+    annotations = transcribe(AUDIO, pipeline)
+    assert len(annotations) > 0

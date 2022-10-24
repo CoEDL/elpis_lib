@@ -45,18 +45,22 @@ class TrainingJob:
     base_model: str = BASE_MODEL
     sampling_rate: int = SAMPLING_RATE
 
-    def to_training_args(self, output_dir: Path) -> TrainingArguments:
+    def to_training_args(self, output_dir: Path, **kwargs) -> TrainingArguments:
         return TrainingArguments(
             output_dir=str(output_dir),
             group_by_length=True,
-            per_device_train_batch_size=16,
-            evaluation_strategy="steps",
             num_train_epochs=self.options.epochs,
+            per_device_train_batch_size=self.options.batch_size,
+            per_device_eval_batch_size=self.options.batch_size,
+            gradient_accumulation_steps=2,
+            evaluation_strategy="steps",
             fp16=True if torch.cuda.is_available() else False,
             gradient_checkpointing=True,
             learning_rate=self.options.learning_rate,
             weight_decay=0.005,
             save_total_limit=2,
+            overwrite_output_dir=True,
+            **kwargs,
         )
 
     @staticmethod

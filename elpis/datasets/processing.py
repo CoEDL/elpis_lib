@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from datasets import Audio, DatasetDict, load_dataset
 from transformers import Wav2Vec2Processor
@@ -11,7 +11,7 @@ SAMPLING_RATE = 16_000
 
 
 def create_dataset(
-    dataset_path: Path, cache_dir: Path, test_size: float = 0.2
+    dataset_path: Path, cache_dir: Optional[Path] = None, test_size: float = 0.2
 ) -> DatasetDict:
     """Creates a dataset with test/train splits from the data within a given
     directory.
@@ -30,9 +30,11 @@ def create_dataset(
         for file in os.listdir(dataset_path)
         if (dataset_path / file).suffix == ".json"
     ]
-    dataset = load_dataset(
-        "json", cache_dir=str(cache_dir), data_files=transcript_files
-    )
+    # Annoying hack
+    if cache_dir is not None:
+        cache_dir = str(cache_dir)  # type: ignore
+
+    dataset = load_dataset("json", data_files=transcript_files, cache_dir=cache_dir)  # type: ignore
 
     # Convert the audio file name column into the matching audio data
     dataset = dataset.rename_column("audio_file", AUDIO_COLUMN)

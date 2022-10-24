@@ -6,14 +6,13 @@ from transformers import AutoModelForCTC, AutoProcessor, pipeline
 
 from elpis.models import Annotation
 
-CACHE_DIR = Path("/tmp")
 TASK = "automatic-speech-recognition"
 
 
 def build_pipeline(
     pretrained_location: str,
     processor_location: Optional[str] = None,
-    cache_dir: Path = CACHE_DIR,
+    cache_dir: Optional[Path] = None,
 ) -> ASRPipeline:
     """Builds the pipeline from the supplied pretrained location.
 
@@ -28,8 +27,12 @@ def build_pipeline(
     if processor_location is None:
         processor_location = pretrained_location
 
-    model = AutoModelForCTC.from_pretrained(pretrained_location, cache_dir=cache_dir)
     processor = AutoProcessor.from_pretrained(processor_location, cache_dir=cache_dir)
+    model = AutoModelForCTC.from_pretrained(
+        pretrained_location,
+        cache_dir=cache_dir,
+        pad_token_id=processor.tokenizer.pad_token_id,
+    )
 
     return pipeline(
         task=TASK,

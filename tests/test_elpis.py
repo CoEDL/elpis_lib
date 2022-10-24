@@ -35,13 +35,12 @@ def test_version():
 @mark.integration
 def test_everything(tmp_path: Path):
     logger.info(f"folder: {tmp_path}")
-    cache_dir = tmp_path / "cache"
     dataset_dir = tmp_path / "dataset"
     model_dir = tmp_path / "model"
     output_dir = tmp_path / "output"
 
     # Make all directories
-    for directory in cache_dir, dataset_dir, model_dir, output_dir:
+    for directory in dataset_dir, model_dir, output_dir:
         directory.mkdir()
 
     # Preprocessing
@@ -53,19 +52,17 @@ def test_everything(tmp_path: Path):
     job = TrainingJob(
         model_name="model",
         dataset_name="dataset",
-        options=TrainingOptions(epochs=1, learning_rate=0.01),
+        options=TrainingOptions(epochs=2, learning_rate=0.001),
     )
     train(
         job=job,
         output_dir=model_dir,
         dataset_dir=dataset_dir,
-        cache_dir=cache_dir,
     )
 
     # Perform inference with pipeline
     asr = build_pipeline(
         pretrained_location=str(model_dir.absolute()),
-        cache_dir=cache_dir,
     )
     audio = DATA_DIR / "oily_rag.wav"
     annotations = transcribe(audio, asr)

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 from loguru import logger
@@ -14,7 +14,7 @@ def train(
     job: TrainingJob,
     output_dir: Path,
     dataset_dir: Path,
-    cache_dir: Path,
+    cache_dir: Optional[Path] = None,
 ) -> Path:
     """Trains a model for use in transcription.
 
@@ -48,8 +48,8 @@ def train(
     trainer = Trainer(
         model=model,
         args=job.to_training_args(output_dir),
-        train_dataset=dataset["train"],
-        eval_dataset=dataset["test"],
+        train_dataset=dataset["train"],  # type: ignore
+        eval_dataset=dataset["test"],  # type: ignore
         tokenizer=processor.feature_extractor,
         data_collator=data_collator,
     )
