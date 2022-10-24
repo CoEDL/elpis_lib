@@ -40,6 +40,8 @@ Below are some typical examples of use cases
 ### Standalone Inference
 
 ```python
+from pathlib import Path
+
 from elpis.transcriber.results import build_text
 from elpis.transcriber.transcribe import build_pipeline, transcribe
 
