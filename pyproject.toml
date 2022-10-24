@@ -1,8 +1,13 @@
 [tool.poetry]
 name = "elpis"
-version = "0.1.0"
-description = ""
+version = "0.1.1"
+description = """\
+  A library to perform automatic speech recognition with huggingface transformers.\
+  """
+readme = "README.md"
+repository = "https://github.com/CoEDL/elpis_lib"
 authors = ["Harry Keightley <harrykeightley@outlook.com>"]
+keywords = ["Elpis", "huggingface", "ASR", "Automatic Speech Recognition", "CoEDL"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
