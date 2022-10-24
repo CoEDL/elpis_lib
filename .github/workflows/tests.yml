@@ -3,9 +3,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - elpis/**.py
+      - tests/**.py
   pull_request:
     branches:
       - main
+    paths:
+      - elpis/**.py
+      - tests/**.py
 
 jobs:
   ci:
