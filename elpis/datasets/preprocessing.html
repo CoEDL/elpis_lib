@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.10.0" />
+<title>elpis.datasets.preprocessing API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>elpis.datasets.preprocessing</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import json
+import shutil
+from copy import copy
+from itertools import chain
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+from loguru import logger
+
+import elpis.utils.audio as audio
+from elpis.datasets import ProcessingBatch
+from elpis.datasets.clean_text import clean_text
+from elpis.datasets.dataset import CleaningOptions
+from elpis.datasets.extract_annotations import extract_annotations
+from elpis.models.annotation import Annotation
+
+DEFAULT_DIR = Path(&#34;/tmp&#34;)
+TARGET_SAMPLE_RATE = 16_000
+
+
+def process_batch(
+    batch: ProcessingBatch, output_dir: Path = DEFAULT_DIR
+) -&gt; Iterable[Path]:
+    &#34;&#34;&#34;Generates training files from the processing batch and puts them in
+    the given directory.
+
+    Parameters:
+        batch: The processing batch to generate files from
+        output_dir: The directory in which to stick the files.
+
+    Returns:
+        The paths of the generated files.
+    &#34;&#34;&#34;
+    annotations = extract_annotations(
+        transcription_file=batch.transcription_file, elan_options=batch.elan_options
+    )
+
+    annotations = map(
+        lambda annotation: clean_annotation(annotation, batch.cleaning_options),
+        annotations,
+    )
+
+    # Generate training files from the annotations
+    return chain(
+        *map(
+            lambda annotation: generate_training_files(
+                annotation, output_dir=output_dir
+            ),
+            annotations,
+        )
+    )
+
+
+def clean_annotation(
+    annotation: Annotation, cleaning_options: CleaningOptions
+) -&gt; Annotation:
+    &#34;&#34;&#34;Cleans the text within an annotation.
+
+    Parameters:
+        annotation: The annotation to clean.
+        cleaning_options: The cleaning options for the dataset.
+
+    Returns:
+        A new annotation whose transcript has been cleaned.
+    &#34;&#34;&#34;
+    transcript = clean_text(
+        text=annotation.transcript,
+        words_to_remove=cleaning_options.words_to_remove,
+        punctuation_to_explode=cleaning_options.punctuation_to_explode,
+        punctuation_to_remove=cleaning_options.punctuation_to_remove,
+    )
+    result = copy(annotation)
+    result.transcript = transcript
+    return result
+
+
+def generate_training_files(
+    annotation: Annotation, output_dir: Path = DEFAULT_DIR
+) -&gt; Tuple[Path, Path]:
+    &#34;&#34;&#34;Generates a transcript and audio file pairing for this annotation.
+
+    If the annotation is timed (has a start and stop time), we return a path
+    to a new audio file, which is constrained to the given times. Otherwise,
+    the annotation spans the entire audio path, and so we return this path,
+    unmodified.
+
+    Parameters:
+        annotation: The annotation for a given section of audio within the
+            supplied audio_file.
+        output_dir: The directory in which to store the generated files.
+
+    Returns:
+        A tuple containing a transcription and audio file path for the given
+            annotation.
+    &#34;&#34;&#34;
+    # Get a unique name prefix based on annotation start time
+    audio_file = annotation.audio_file
+    name = audio_file.stem
+    if annotation.start_ms is not None:
+        name = f&#34;{name}_{annotation.start_ms}&#34;
+
+    # Save audio file.
+    if annotation.is_timed():
+        cut_audio_file = output_dir / f&#34;{name}.wav&#34;
+        audio.cut(
+            audio_path=audio_file,
+            destination=cut_audio_file,
+            start_ms=annotation.start_ms,  # type: ignore
+            stop_ms=annotation.stop_ms,  # type: ignore
+        )
+        audio_file = cut_audio_file
+    else:
+        # Make sure we&#39;re putting the audio file in the output dir
+        if audio_file.parent != output_dir:
+            shutil.copy(str(audio_file), str(output_dir / audio_file.name))
+            audio_file = output_dir / audio_file.name
+
+    # Resample audio to standardise for training
+    audio.resample(
+        audio_path=audio_file,
+        destination=audio_file,
+        sample_rate=TARGET_SAMPLE_RATE,
+    )
+
+    # Save gimped transcription_file
+    next_annotation = Annotation(
+        audio_file=audio_file, transcript=annotation.transcript
+    )
+    transcription_file = output_dir / f&#34;{name}.json&#34;
+    with open(transcription_file, &#34;w&#34;) as f:
+        json.dump(next_annotation.to_dict(), f)
+
+    return transcription_file, audio_file
+
+
+def has_finished_processing(
+    dataset_files: List[str], processed_files: List[str]
+) -&gt; bool:
+    &#34;&#34;&#34;Checks whether the dataset has finished processing.
+
+    Parameters:
+        dataset_files: A list of names of the files in the dataset.
+        processed_files: A list of names of files uploaded to cloud storage for
+            the corresponding dataset.
+
+    Returns:
+        true iff the supplied list of processed files would be a valid
+        processed dataset for the initial files.
+    &#34;&#34;&#34;
+
+    required_stems = {Path(name).stem for name in dataset_files}
+    uploaded_stems = {Path(name).stem for name in processed_files}
+
+    def is_processed(required_stem: str) -&gt; bool:
+        starts_with_required_stem = lambda stem: stem.startswith(required_stem)
+        return any(map(starts_with_required_stem, uploaded_stems))
+
+    return all(map(is_processed, required_stems))</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="elpis.datasets.preprocessing.clean_annotation"><code class="name flex">
+<span>def <span class="ident">clean_annotation</span></span>(<span>annotation: <a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a>, cleaning_options: <a title="elpis.datasets.dataset.CleaningOptions" href="dataset.html#elpis.datasets.dataset.CleaningOptions">CleaningOptions</a>) ‑> <a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Cleans the text within an annotation.</p>
+<h2 id="parameters">Parameters</h2>
+<p>annotation: The annotation to clean.
+cleaning_options: The cleaning options for the dataset.</p>
+<h2 id="returns">Returns</h2>
+<p>A new annotation whose transcript has been cleaned.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def clean_annotation(
+    annotation: Annotation, cleaning_options: CleaningOptions
+) -&gt; Annotation:
+    &#34;&#34;&#34;Cleans the text within an annotation.
+
+    Parameters:
+        annotation: The annotation to clean.
+        cleaning_options: The cleaning options for the dataset.
+
+    Returns:
+        A new annotation whose transcript has been cleaned.
+    &#34;&#34;&#34;
+    transcript = clean_text(
+        text=annotation.transcript,
+        words_to_remove=cleaning_options.words_to_remove,
+        punctuation_to_explode=cleaning_options.punctuation_to_explode,
+        punctuation_to_remove=cleaning_options.punctuation_to_remove,
+    )
+    result = copy(annotation)
+    result.transcript = transcript
+    return result</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.preprocessing.generate_training_files"><code class="name flex">
+<span>def <span class="ident">generate_training_files</span></span>(<span>annotation: <a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a>, output_dir: pathlib.Path = PosixPath('/tmp')) ‑> Tuple[pathlib.Path, pathlib.Path]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Generates a transcript and audio file pairing for this annotation.</p>
+<p>If the annotation is timed (has a start and stop time), we return a path
+to a new audio file, which is constrained to the given times. Otherwise,
+the annotation spans the entire audio path, and so we return this path,
+unmodified.</p>
+<h2 id="parameters">Parameters</h2>
+<p>annotation: The annotation for a given section of audio within the
+supplied audio_file.
+output_dir: The directory in which to store the generated files.</p>
+<h2 id="returns">Returns</h2>
+<p>A tuple containing a transcription and audio file path for the given
+annotation.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def generate_training_files(
+    annotation: Annotation, output_dir: Path = DEFAULT_DIR
+) -&gt; Tuple[Path, Path]:
+    &#34;&#34;&#34;Generates a transcript and audio file pairing for this annotation.
+
+    If the annotation is timed (has a start and stop time), we return a path
+    to a new audio file, which is constrained to the given times. Otherwise,
+    the annotation spans the entire audio path, and so we return this path,
+    unmodified.
+
+    Parameters:
+        annotation: The annotation for a given section of audio within the
+            supplied audio_file.
+        output_dir: The directory in which to store the generated files.
+
+    Returns:
+        A tuple containing a transcription and audio file path for the given
+            annotation.
+    &#34;&#34;&#34;
+    # Get a unique name prefix based on annotation start time
+    audio_file = annotation.audio_file
+    name = audio_file.stem
+    if annotation.start_ms is not None:
+        name = f&#34;{name}_{annotation.start_ms}&#34;
+
+    # Save audio file.
+    if annotation.is_timed():
+        cut_audio_file = output_dir / f&#34;{name}.wav&#34;
+        audio.cut(
+            audio_path=audio_file,
+            destination=cut_audio_file,
+            start_ms=annotation.start_ms,  # type: ignore
+            stop_ms=annotation.stop_ms,  # type: ignore
+        )
+        audio_file = cut_audio_file
+    else:
+        # Make sure we&#39;re putting the audio file in the output dir
+        if audio_file.parent != output_dir:
+            shutil.copy(str(audio_file), str(output_dir / audio_file.name))
+            audio_file = output_dir / audio_file.name
+
+    # Resample audio to standardise for training
+    audio.resample(
+        audio_path=audio_file,
+        destination=audio_file,
+        sample_rate=TARGET_SAMPLE_RATE,
+    )
+
+    # Save gimped transcription_file
+    next_annotation = Annotation(
+        audio_file=audio_file, transcript=annotation.transcript
+    )
+    transcription_file = output_dir / f&#34;{name}.json&#34;
+    with open(transcription_file, &#34;w&#34;) as f:
+        json.dump(next_annotation.to_dict(), f)
+
+    return transcription_file, audio_file</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.preprocessing.has_finished_processing"><code class="name flex">
+<span>def <span class="ident">has_finished_processing</span></span>(<span>dataset_files: List[str], processed_files: List[str]) ‑> bool</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Checks whether the dataset has finished processing.</p>
+<h2 id="parameters">Parameters</h2>
+<p>dataset_files: A list of names of the files in the dataset.
+processed_files: A list of names of files uploaded to cloud storage for
+the corresponding dataset.</p>
+<h2 id="returns">Returns</h2>
+<p>true iff the supplied list of processed files would be a valid
+processed dataset for the initial files.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def has_finished_processing(
+    dataset_files: List[str], processed_files: List[str]
+) -&gt; bool:
+    &#34;&#34;&#34;Checks whether the dataset has finished processing.
+
+    Parameters:
+        dataset_files: A list of names of the files in the dataset.
+        processed_files: A list of names of files uploaded to cloud storage for
+            the corresponding dataset.
+
+    Returns:
+        true iff the supplied list of processed files would be a valid
+        processed dataset for the initial files.
+    &#34;&#34;&#34;
+
+    required_stems = {Path(name).stem for name in dataset_files}
+    uploaded_stems = {Path(name).stem for name in processed_files}
+
+    def is_processed(required_stem: str) -&gt; bool:
+        starts_with_required_stem = lambda stem: stem.startswith(required_stem)
+        return any(map(starts_with_required_stem, uploaded_stems))
+
+    return all(map(is_processed, required_stems))</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.preprocessing.process_batch"><code class="name flex">
+<span>def <span class="ident">process_batch</span></span>(<span>batch: <a title="elpis.datasets.dataset.ProcessingBatch" href="dataset.html#elpis.datasets.dataset.ProcessingBatch">ProcessingBatch</a>, output_dir: pathlib.Path = PosixPath('/tmp')) ‑> Iterable[pathlib.Path]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Generates training files from the processing batch and puts them in
+the given directory.</p>
+<h2 id="parameters">Parameters</h2>
+<p>batch: The processing batch to generate files from
+output_dir: The directory in which to stick the files.</p>
+<h2 id="returns">Returns</h2>
+<p>The paths of the generated files.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def process_batch(
+    batch: ProcessingBatch, output_dir: Path = DEFAULT_DIR
+) -&gt; Iterable[Path]:
+    &#34;&#34;&#34;Generates training files from the processing batch and puts them in
+    the given directory.
+
+    Parameters:
+        batch: The processing batch to generate files from
+        output_dir: The directory in which to stick the files.
+
+    Returns:
+        The paths of the generated files.
+    &#34;&#34;&#34;
+    annotations = extract_annotations(
+        transcription_file=batch.transcription_file, elan_options=batch.elan_options
+    )
+
+    annotations = map(
+        lambda annotation: clean_annotation(annotation, batch.cleaning_options),
+        annotations,
+    )
+
+    # Generate training files from the annotations
+    return chain(
+        *map(
+            lambda annotation: generate_training_files(
+                annotation, output_dir=output_dir
+            ),
+            annotations,
+        )
+    )</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="elpis.datasets" href="index.html">elpis.datasets</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="elpis.datasets.preprocessing.clean_annotation" href="#elpis.datasets.preprocessing.clean_annotation">clean_annotation</a></code></li>
+<li><code><a title="elpis.datasets.preprocessing.generate_training_files" href="#elpis.datasets.preprocessing.generate_training_files">generate_training_files</a></code></li>
+<li><code><a title="elpis.datasets.preprocessing.has_finished_processing" href="#elpis.datasets.preprocessing.has_finished_processing">has_finished_processing</a></code></li>
+<li><code><a title="elpis.datasets.preprocessing.process_batch" href="#elpis.datasets.preprocessing.process_batch">process_batch</a></code></li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+</footer>
+</body>
+</html>
