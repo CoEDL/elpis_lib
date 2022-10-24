@@ -28,6 +28,7 @@ class TrainingOptions:
     max_duration: int = 60
     word_delimiter_token: str = " "
     test_size: float = 0.2
+    freeze_feature_extractor: bool = False
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "TrainingOptions":
@@ -58,8 +59,14 @@ class TrainingJob:
             gradient_checkpointing=True,
             learning_rate=self.options.learning_rate,
             weight_decay=0.005,
+            save_steps=500,
+            eval_steps=500,
+            logging_steps=500,
+            warmup_steps=1000,
             save_total_limit=2,
             overwrite_output_dir=True,
+            do_train=True,
+            do_eval=True,
             **kwargs,
         )
 

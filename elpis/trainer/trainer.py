@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 
 import torch
 from loguru import logger
-from transformers import AutoModelForCTC, AutoProcessor, Trainer
+from transformers import AutoModelForCTC, AutoProcessor, Trainer, Wav2Vec2Processor
 
 from elpis.datasets.processing import create_dataset, prepare_dataset
 from elpis.trainer.job import TrainingJob
@@ -40,6 +40,10 @@ def train(
         ctc_loss_reduction="mean",
         pad_token_id=processor.tokenizer.pad_token_id,
     )
+
+    if job.options.freeze_feature_extractor:
+        model.freeze_feature_extractor()
+
     logger.info("Downloaded model.")
 
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
@@ -68,13 +72,17 @@ def train(
 
 @dataclass
 class DataCollatorCTCWithPadding:
-    processor: AutoProcessor
+    processor: Wav2Vec2Processor
     padding: Union[bool, str] = True
+    max_length: Optional[int] = None
+    max_length_labels: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+    pad_to_multiple_of_labels: Optional[int] = None
 
     def __call__(
         self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lengths and need
+        # split inputs and labels since they have to be of different lenghts and need
         # different padding methods
         input_features = [
             {"input_values": feature["input_values"]} for feature in features
@@ -84,12 +92,16 @@ class DataCollatorCTCWithPadding:
         batch = self.processor.pad(
             input_features,
             padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
         with self.processor.as_target_processor():
             labels_batch = self.processor.pad(
                 label_features,
                 padding=self.padding,
+                max_length=self.max_length_labels,
+                pad_to_multiple_of=self.pad_to_multiple_of_labels,
                 return_tensors="pt",
             )
 
@@ -99,4 +111,5 @@ class DataCollatorCTCWithPadding:
         )
 
         batch["labels"] = labels
+
         return batch
