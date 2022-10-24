@@ -360,6 +360,41 @@ win32-setctime = {version = ">=1.0.0", markers = "sys_platform == \"win32\""}
 dev = ["sphinx-rtd-theme (>=0.4.3)", "sphinx-autobuild (>=0.7.1)", "Sphinx (>=4.1.1)", "isort (>=5.1.1)", "black (>=19.10b0)", "pytest-cov (>=2.7.1)", "pytest (>=4.6.2)", "tox (>=3.9.0)", "flake8 (>=3.7.7)", "docutils (==0.16)", "colorama (>=0.3.4)"]
 
 [[package]]
+name = "mako"
+version = "1.2.3"
+description = "A super-fast templating language that borrows the best ideas from the existing templating languages."
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+MarkupSafe = ">=0.9.2"
+
+[package.extras]
+babel = ["babel"]
+lingua = ["lingua"]
+testing = ["pytest"]
+
+[[package]]
+name = "markdown"
+version = "3.4.1"
+description = "Python implementation of Markdown."
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+testing = ["coverage", "pyyaml"]
+
+[[package]]
+name = "markupsafe"
+version = "2.1.1"
+description = "Safely add untrusted strings to HTML/XML markup."
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
 name = "multidict"
 version = "6.0.2"
 description = "multidict implementation"
@@ -448,6 +483,18 @@ description = "Utility library for gitignore style pattern matching of file path
 category = "dev"
 optional = false
 python-versions = ">=3.7"
+
+[[package]]
+name = "pdoc3"
+version = "0.10.0"
+description = "Auto-generate API documentation for Python projects."
+category = "dev"
+optional = false
+python-versions = ">= 3.6"
+
+[package.dependencies]
+mako = "*"
+markdown = ">=3.0"
 
 [[package]]
 name = "pedalboard"
@@ -915,7 +962,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "ff8163d87b1f53cf4f3b9a77d46a3f09b7563601f542dc11c00a69dcbe7cbfb6"
+content-hash = "2b5ef605c85c078b15313391e2f9c2f1861ce8775ce0c76747498d4f9fb5d9ce"
 
 [metadata.files]
 aiohttp = []
@@ -944,6 +991,9 @@ joblib = []
 librosa = []
 llvmlite = []
 loguru = []
+mako = []
+markdown = []
+markupsafe = []
 multidict = []
 multiprocess = []
 mypy-extensions = []
@@ -953,6 +1003,7 @@ numpy = []
 packaging = []
 pandas = []
 pathspec = []
+pdoc3 = []
 pedalboard = []
 platformdirs = []
 pluggy = []

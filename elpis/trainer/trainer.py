@@ -40,11 +40,10 @@ def train(
         ctc_loss_reduction="mean",
         pad_token_id=processor.tokenizer.pad_token_id,
     )
+    logger.info("Downloaded model.")
 
     if job.options.freeze_feature_extractor:
         model.freeze_feature_extractor()
-
-    logger.info("Downloaded model.")
 
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
     output_dir.mkdir(exist_ok=True, parents=True)
