@@ -16,11 +16,17 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install pdoc3
-        run: pip install pdoc3
+      - name: Setup poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: "1.1.13"
+
+      - name: Poetry install
+        run: |
+          poetry install
 
       - name: Build documentation
-        run: pdoc --html --output-dir out elpis
+        run: poetry run pdoc --html --output-dir out elpis
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
