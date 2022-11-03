@@ -21,6 +21,8 @@ class TrainingStatus(Enum):
 
 @dataclass
 class TrainingOptions:
+    """A class representing some commonly changed training options"""
+
     batch_size: int = 4
     epochs: int = 2
     learning_rate: float = 1e-4
@@ -36,9 +38,14 @@ class TrainingOptions:
         kwargs = {key: data[key] for key in data if key in field_names}
         return TrainingOptions(**kwargs)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(self.__dict__)
+
 
 @dataclass
 class TrainingJob:
+    """A class representing a training job for a model"""
+
     model_name: str
     dataset_name: str
     options: TrainingOptions
@@ -80,3 +87,8 @@ class TrainingJob:
             base_model=data.get("base_model", BASE_MODEL),
             sampling_rate=data.get("sampling_rate", SAMPLING_RATE),
         )
+
+    def to_dict(self) -> Dict[str, Any]:
+        result = dict(self.__dict__)
+        result |= dict(options=self.options.to_dict(), status=self.status.value)
+        return result
