@@ -49,6 +49,8 @@ class TrainingStatus(Enum):
 
 @dataclass
 class TrainingOptions:
+    &#34;&#34;&#34;A class representing some commonly changed training options&#34;&#34;&#34;
+
     batch_size: int = 4
     epochs: int = 2
     learning_rate: float = 1e-4
@@ -64,9 +66,14 @@ class TrainingOptions:
         kwargs = {key: data[key] for key in data if key in field_names}
         return TrainingOptions(**kwargs)
 
+    def to_dict(self) -&gt; Dict[str, Any]:
+        return dict(self.__dict__)
+
 
 @dataclass
 class TrainingJob:
+    &#34;&#34;&#34;A class representing a training job for a model&#34;&#34;&#34;
+
     model_name: str
     dataset_name: str
     options: TrainingOptions
@@ -107,7 +114,12 @@ class TrainingJob:
             status=TrainingStatus(data[&#34;status&#34;]),
             base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
             sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
-        )</code></pre>
+        )
+
+    def to_dict(self) -&gt; Dict[str, Any]:
+        result = dict(self.__dict__)
+        result |= dict(options=self.options.to_dict(), status=self.status.value)
+        return result</code></pre>
 </details>
 </section>
 <section>
@@ -124,13 +136,15 @@ class TrainingJob:
 <span>(</span><span>model_name: str, dataset_name: str, options: <a title="elpis.trainer.job.TrainingOptions" href="#elpis.trainer.job.TrainingOptions">TrainingOptions</a>, status: <a title="elpis.trainer.job.TrainingStatus" href="#elpis.trainer.job.TrainingStatus">TrainingStatus</a> = TrainingStatus.WAITING, base_model: str = 'facebook/wav2vec2-base-960h', sampling_rate: int = 16000)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>TrainingJob(model_name: 'str', dataset_name: 'str', options: 'TrainingOptions', status: 'TrainingStatus' = <TrainingStatus.WAITING: 'waiting'>, base_model: 'str' = 'facebook/wav2vec2-base-960h', sampling_rate: 'int' = 16000)</p></div>
+<div class="desc"><p>A class representing a training job for a model</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@dataclass
 class TrainingJob:
+    &#34;&#34;&#34;A class representing a training job for a model&#34;&#34;&#34;
+
     model_name: str
     dataset_name: str
     options: TrainingOptions
@@ -171,7 +185,12 @@ class TrainingJob:
             status=TrainingStatus(data[&#34;status&#34;]),
             base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
             sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
-        )</code></pre>
+        )
+
+    def to_dict(self) -&gt; Dict[str, Any]:
+        result = dict(self.__dict__)
+        result |= dict(options=self.options.to_dict(), status=self.status.value)
+        return result</code></pre>
 </details>
 <h3>Class variables</h3>
 <dl>
@@ -226,6 +245,21 @@ def from_dict(data: Dict[str, Any]) -&gt; TrainingJob:
 </dl>
 <h3>Methods</h3>
 <dl>
+<dt id="elpis.trainer.job.TrainingJob.to_dict"><code class="name flex">
+<span>def <span class="ident">to_dict</span></span>(<span>self) ‑> Dict[str, Any]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def to_dict(self) -&gt; Dict[str, Any]:
+    result = dict(self.__dict__)
+    result |= dict(options=self.options.to_dict(), status=self.status.value)
+    return result</code></pre>
+</details>
+</dd>
 <dt id="elpis.trainer.job.TrainingJob.to_training_args"><code class="name flex">
 <span>def <span class="ident">to_training_args</span></span>(<span>self, output_dir: Path, **kwargs) ‑> transformers.training_args.TrainingArguments</span>
 </code></dt>
@@ -267,13 +301,15 @@ def from_dict(data: Dict[str, Any]) -&gt; TrainingJob:
 <span>(</span><span>batch_size: int = 4, epochs: int = 2, learning_rate: float = 0.0001, min_duration: int = 0, max_duration: int = 60, word_delimiter_token: str = ' ', test_size: float = 0.2, freeze_feature_extractor: bool = False)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>TrainingOptions(batch_size: 'int' = 4, epochs: 'int' = 2, learning_rate: 'float' = 0.0001, min_duration: 'int' = 0, max_duration: 'int' = 60, word_delimiter_token: 'str' = ' ', test_size: 'float' = 0.2, freeze_feature_extractor: 'bool' = False)</p></div>
+<div class="desc"><p>A class representing some commonly changed training options</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@dataclass
 class TrainingOptions:
+    &#34;&#34;&#34;A class representing some commonly changed training options&#34;&#34;&#34;
+
     batch_size: int = 4
     epochs: int = 2
     learning_rate: float = 1e-4
@@ -287,7 +323,10 @@ class TrainingOptions:
     def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
         field_names = [field.name for field in fields(TrainingOptions)]
         kwargs = {key: data[key] for key in data if key in field_names}
-        return TrainingOptions(**kwargs)</code></pre>
+        return TrainingOptions(**kwargs)
+
+    def to_dict(self) -&gt; Dict[str, Any]:
+        return dict(self.__dict__)</code></pre>
 </details>
 <h3>Class variables</h3>
 <dl>
@@ -340,6 +379,22 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
     field_names = [field.name for field in fields(TrainingOptions)]
     kwargs = {key: data[key] for key in data if key in field_names}
     return TrainingOptions(**kwargs)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="elpis.trainer.job.TrainingOptions.to_dict"><code class="name flex">
+<span>def <span class="ident">to_dict</span></span>(<span>self) ‑> Dict[str, Any]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def to_dict(self) -&gt; Dict[str, Any]:
+    return dict(self.__dict__)</code></pre>
 </details>
 </dd>
 </dl>
@@ -410,6 +465,7 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 <li><code><a title="elpis.trainer.job.TrainingJob.options" href="#elpis.trainer.job.TrainingJob.options">options</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.sampling_rate" href="#elpis.trainer.job.TrainingJob.sampling_rate">sampling_rate</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.status" href="#elpis.trainer.job.TrainingJob.status">status</a></code></li>
+<li><code><a title="elpis.trainer.job.TrainingJob.to_dict" href="#elpis.trainer.job.TrainingJob.to_dict">to_dict</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.to_training_args" href="#elpis.trainer.job.TrainingJob.to_training_args">to_training_args</a></code></li>
 </ul>
 </li>
@@ -424,6 +480,7 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 <li><code><a title="elpis.trainer.job.TrainingOptions.max_duration" href="#elpis.trainer.job.TrainingOptions.max_duration">max_duration</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingOptions.min_duration" href="#elpis.trainer.job.TrainingOptions.min_duration">min_duration</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingOptions.test_size" href="#elpis.trainer.job.TrainingOptions.test_size">test_size</a></code></li>
+<li><code><a title="elpis.trainer.job.TrainingOptions.to_dict" href="#elpis.trainer.job.TrainingOptions.to_dict">to_dict</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingOptions.word_delimiter_token" href="#elpis.trainer.job.TrainingOptions.word_delimiter_token">word_delimiter_token</a></code></li>
 </ul>
 </li>

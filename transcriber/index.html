@@ -19,9 +19,18 @@
 <main>
 <article id="content">
 <header>
-<h1 class="title">Namespace <code>elpis.transcriber</code></h1>
+<h1 class="title">Module <code>elpis.transcriber</code></h1>
 </header>
 <section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">from elpis.transcriber.results import build_elan, build_text
+from elpis.transcriber.transcribe import build_pipeline, transcribe
+
+__all__ = [&#34;build_elan&#34;, &#34;build_text&#34;, &#34;build_pipeline&#34;, &#34;transcribe&#34;]</code></pre>
+</details>
 </section>
 <section>
 <h2 class="section-title" id="header-submodules">Sub-modules</h2>
@@ -30,15 +39,160 @@
 <dd>
 <div class="desc"></div>
 </dd>
-<dt><code class="name"><a title="elpis.transcriber.transcribe" href="transcribe.html">elpis.transcriber.transcribe</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
 </dl>
 </section>
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="elpis.transcriber.build_elan"><code class="name flex">
+<span>def <span class="ident">build_elan</span></span>(<span>annotations: List[<a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a>], tier_name: str = 'Phrase') ‑> pympi.Elan.Eaf</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Builds an elan file from the given annotations and tier_name.</p>
+<h2 id="parameters">Parameters</h2>
+<p>annotations: The list of annotations to add.
+tier_name: The name of the tier to add the annotations under.</p>
+<h2 id="returns">Returns</h2>
+<p>The resulting elan file.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def build_elan(annotations: List[Annotation], tier_name: str = &#34;Phrase&#34;) -&gt; Eaf:
+    &#34;&#34;&#34;Builds an elan file from the given annotations and tier_name.
+
+    Parameters:
+        annotations: The list of annotations to add.
+        tier_name: The name of the tier to add the annotations under.
+
+    Returns:
+        The resulting elan file.
+    &#34;&#34;&#34;
+    result = Eaf()
+    result.add_tier(tier_name)
+    for annotation in annotations:
+        result.add_annotation(
+            id_tier=tier_name, start=annotation.start_ms, end=annotation.stop_ms
+        )
+    return result</code></pre>
+</details>
+</dd>
+<dt id="elpis.transcriber.build_pipeline"><code class="name flex">
+<span>def <span class="ident">build_pipeline</span></span>(<span>pretrained_location: str, processor_location: Optional[str] = None, cache_dir: Optional[pathlib.Path] = None) ‑> transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Builds the pipeline from the supplied pretrained location.</p>
+<h2 id="parameters">Parameters</h2>
+<p>pretrained_location: A huggingface model name, or local path to the
+pretrained model.
+cache_dir: The directory in which to store temporary files.</p>
+<h2 id="returns">Returns</h2>
+<p>A pipeline to be used for asr.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def build_pipeline(
+    pretrained_location: str,
+    processor_location: Optional[str] = None,
+    cache_dir: Optional[Path] = None,
+) -&gt; ASRPipeline:
+    &#34;&#34;&#34;Builds the pipeline from the supplied pretrained location.
+
+    Parameters:
+        pretrained_location: A huggingface model name, or local path to the
+            pretrained model.
+        cache_dir: The directory in which to store temporary files.
+
+    Returns:
+        A pipeline to be used for asr.
+    &#34;&#34;&#34;
+    if processor_location is None:
+        processor_location = pretrained_location
+
+    processor = AutoProcessor.from_pretrained(processor_location, cache_dir=cache_dir)
+    model = AutoModelForCTC.from_pretrained(
+        pretrained_location,
+        cache_dir=cache_dir,
+        pad_token_id=processor.tokenizer.pad_token_id,
+    )
+
+    return pipeline(
+        task=TASK,
+        model=model,
+        tokenizer=processor.tokenizer,
+        feature_extractor=processor.feature_extractor,
+    )  # type: ignore</code></pre>
+</details>
+</dd>
+<dt id="elpis.transcriber.build_text"><code class="name flex">
+<span>def <span class="ident">build_text</span></span>(<span>annotations: List[<a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a>]) ‑> str</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Combines all the text from a list of annotations, ordered from earliest
+start time.</p>
+<h2 id="parameters">Parameters</h2>
+<p>annotations: The list of annotations to Combines</p>
+<h2 id="returns">Returns</h2>
+<p>The combined transcripts.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def build_text(annotations: List[Annotation]) -&gt; str:
+    &#34;&#34;&#34;Combines all the text from a list of annotations, ordered from earliest
+    start time.
+
+    Parameters:
+        annotations: The list of annotations to Combines
+
+    Returns:
+        The combined transcripts.
+    &#34;&#34;&#34;
+    annotations = sorted(
+        annotations,
+        key=(
+            lambda annotation: annotation.start_ms
+            if annotation.start_ms is not None
+            else 0
+        ),
+    )
+    return &#34; &#34;.join(annotation.transcript for annotation in annotations)</code></pre>
+</details>
+</dd>
+<dt id="elpis.transcriber.transcribe"><code class="name flex">
+<span>def <span class="ident">transcribe</span></span>(<span>audio: pathlib.Path, asr: transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline) ‑> List[<a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a>]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Transcribes the given audio and gives back the resulting annotations.</p>
+<h2 id="parameters">Parameters</h2>
+<p>audio: The path to the audio file to transcribe.
+asr: The automatic speech recognition pipeline.</p>
+<h2 id="returns">Returns</h2>
+<p>A list of the inferred annotations in the given audio.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def transcribe(audio: Path, asr: ASRPipeline) -&gt; List[Annotation]:
+    &#34;&#34;&#34;Transcribes the given audio and gives back the resulting annotations.
+
+    Parameters:
+        audio: The path to the audio file to transcribe.
+        asr: The automatic speech recognition pipeline.
+
+    Returns:
+        A list of the inferred annotations in the given audio.
+    &#34;&#34;&#34;
+    preds: Dict[str, Any] = asr(str(audio), return_timestamps=&#34;word&#34;)  # type: ignore
+    chunks = preds[&#34;chunks&#34;]
+
+    return list(map(lambda chunk: annotation_from_chunk(chunk, audio), chunks))</code></pre>
+</details>
+</dd>
+</dl>
 </section>
 <section>
 </section>
@@ -57,7 +211,14 @@
 <li><h3><a href="#header-submodules">Sub-modules</a></h3>
 <ul>
 <li><code><a title="elpis.transcriber.results" href="results.html">elpis.transcriber.results</a></code></li>
-<li><code><a title="elpis.transcriber.transcribe" href="transcribe.html">elpis.transcriber.transcribe</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="elpis.transcriber.build_elan" href="#elpis.transcriber.build_elan">build_elan</a></code></li>
+<li><code><a title="elpis.transcriber.build_pipeline" href="#elpis.transcriber.build_pipeline">build_pipeline</a></code></li>
+<li><code><a title="elpis.transcriber.build_text" href="#elpis.transcriber.build_text">build_text</a></code></li>
+<li><code><a title="elpis.transcriber.transcribe" href="#elpis.transcriber.transcribe">transcribe</a></code></li>
 </ul>
 </li>
 </ul>

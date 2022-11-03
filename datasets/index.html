@@ -27,8 +27,17 @@
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">from elpis.datasets.dataset import CleaningOptions, Dataset, ProcessingBatch
+from elpis.datasets.preprocessing import process_batch
+from elpis.datasets.processing import create_dataset, prepare_dataset
 
-__all__ = [&#34;CleaningOptions&#34;, &#34;Dataset&#34;, &#34;ProcessingBatch&#34;]</code></pre>
+__all__ = [
+    &#34;CleaningOptions&#34;,
+    &#34;Dataset&#34;,
+    &#34;ProcessingBatch&#34;,
+    &#34;process_batch&#34;,
+    &#34;create_dataset&#34;,
+    &#34;prepare_dataset&#34;,
+]</code></pre>
 </details>
 </section>
 <section>
@@ -59,6 +68,157 @@ __all__ = [&#34;CleaningOptions&#34;, &#34;Dataset&#34;, &#34;ProcessingBatch&#3
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="elpis.datasets.create_dataset"><code class="name flex">
+<span>def <span class="ident">create_dataset</span></span>(<span>dataset_path: pathlib.Path, cache_dir: Optional[pathlib.Path] = None, test_size: float = 0.2) ‑> datasets.dataset_dict.DatasetDict</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Creates a dataset with test/train splits from the data within a given
+directory.</p>
+<h2 id="parameters">Parameters</h2>
+<p>dataset_path: The path to the unprocessed dataset files.
+cache_dir: The path to save the processed dataset.
+test_size: The percentage of the dataset to allocate as the test set.</p>
+<h2 id="returns">Returns</h2>
+<p>A dataset dictionary with test and train splits.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_dataset(
+    dataset_path: Path, cache_dir: Optional[Path] = None, test_size: float = 0.2
+) -&gt; DatasetDict:
+    &#34;&#34;&#34;Creates a dataset with test/train splits from the data within a given
+    directory.
+
+    Parameters:
+        dataset_path: The path to the unprocessed dataset files.
+        cache_dir: The path to save the processed dataset.
+        test_size: The percentage of the dataset to allocate as the test set.
+
+    Returns:
+        A dataset dictionary with test and train splits.
+    &#34;&#34;&#34;
+
+    transcript_files = [
+        str(dataset_path / file)
+        for file in os.listdir(dataset_path)
+        if (dataset_path / file).suffix == &#34;.json&#34;
+    ]
+    # Annoying hack
+    if cache_dir is not None:
+        cache_dir = str(cache_dir)  # type: ignore
+
+    dataset = load_dataset(&#34;json&#34;, data_files=transcript_files, cache_dir=cache_dir)  # type: ignore
+
+    # Convert the audio file name column into the matching audio data
+    dataset = dataset.rename_column(&#34;audio_file&#34;, AUDIO_COLUMN)
+
+    def resolve_audio_path(row: Dict[str, Any]) -&gt; Dict[str, Any]:
+        row[AUDIO_COLUMN] = str(dataset_path / row[AUDIO_COLUMN])
+        return row
+
+    dataset = dataset.map(resolve_audio_path)
+    dataset = dataset.cast_column(AUDIO_COLUMN, Audio(sampling_rate=SAMPLING_RATE))
+
+    return dataset[&#34;train&#34;].train_test_split(test_size=test_size)  # type: ignore</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.prepare_dataset"><code class="name flex">
+<span>def <span class="ident">prepare_dataset</span></span>(<span>dataset: datasets.dataset_dict.DatasetDict, processor: transformers.models.wav2vec2.processing_wav2vec2.Wav2Vec2Processor) ‑> datasets.dataset_dict.DatasetDict</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Runs some preprocessing over the given dataset.</p>
+<p>TODO: I'm going to be honest, I have no idea what this does, and need some
+smart ML knight in shining armour to write a propert description.</p>
+<h2 id="parameters">Parameters</h2>
+<p>dataset: The dataset to apply the preprocessing
+processor: The processor to apply over the dataset</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -&gt; DatasetDict:
+    &#34;&#34;&#34;Runs some preprocessing over the given dataset.
+
+    TODO: I&#39;m going to be honest, I have no idea what this does, and need some
+    smart ML knight in shining armour to write a propert description.
+
+    Parameters:
+        dataset: The dataset to apply the preprocessing
+        processor: The processor to apply over the dataset
+    &#34;&#34;&#34;
+
+    def prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
+        audio = batch[&#34;audio&#34;]
+
+        batch[&#34;input_values&#34;] = processor(
+            audio[&#34;array&#34;], sampling_rate=audio[&#34;sampling_rate&#34;]
+        ).input_values[0]
+        batch[&#34;input_length&#34;] = len(batch[&#34;input_values&#34;])
+
+        with processor.as_target_processor():
+            batch[&#34;labels&#34;] = processor(batch[&#34;transcript&#34;]).input_ids
+
+        return batch
+
+    return dataset.map(
+        prepare_dataset,
+        remove_columns=dataset.column_names[&#34;train&#34;],
+        num_proc=PROCESSOR_COUNT,
+    )</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.process_batch"><code class="name flex">
+<span>def <span class="ident">process_batch</span></span>(<span>batch: <a title="elpis.datasets.dataset.ProcessingBatch" href="dataset.html#elpis.datasets.dataset.ProcessingBatch">ProcessingBatch</a>, output_dir: pathlib.Path = PosixPath('/tmp')) ‑> Iterable[pathlib.Path]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Generates training files from the processing batch and puts them in
+the given directory.</p>
+<h2 id="parameters">Parameters</h2>
+<p>batch: The processing batch to generate files from
+output_dir: The directory in which to stick the files.</p>
+<h2 id="returns">Returns</h2>
+<p>The paths of the generated files.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def process_batch(
+    batch: ProcessingBatch, output_dir: Path = DEFAULT_DIR
+) -&gt; Iterable[Path]:
+    &#34;&#34;&#34;Generates training files from the processing batch and puts them in
+    the given directory.
+
+    Parameters:
+        batch: The processing batch to generate files from
+        output_dir: The directory in which to stick the files.
+
+    Returns:
+        The paths of the generated files.
+    &#34;&#34;&#34;
+    annotations = extract_annotations(
+        transcription_file=batch.transcription_file, elan_options=batch.elan_options
+    )
+
+    annotations = map(
+        lambda annotation: clean_annotation(annotation, batch.cleaning_options),
+        annotations,
+    )
+
+    # Generate training files from the annotations
+    return chain(
+        *map(
+            lambda annotation: generate_training_files(
+                annotation, output_dir=output_dir
+            ),
+            annotations,
+        )
+    )</code></pre>
+</details>
+</dd>
+</dl>
 </section>
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
@@ -632,6 +792,13 @@ def from_dict(cls, data: Dict[str, Any]) -&gt; ProcessingBatch:
 <li><code><a title="elpis.datasets.extract_annotations" href="extract_annotations.html">elpis.datasets.extract_annotations</a></code></li>
 <li><code><a title="elpis.datasets.preprocessing" href="preprocessing.html">elpis.datasets.preprocessing</a></code></li>
 <li><code><a title="elpis.datasets.processing" href="processing.html">elpis.datasets.processing</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="elpis.datasets.create_dataset" href="#elpis.datasets.create_dataset">create_dataset</a></code></li>
+<li><code><a title="elpis.datasets.prepare_dataset" href="#elpis.datasets.prepare_dataset">prepare_dataset</a></code></li>
+<li><code><a title="elpis.datasets.process_batch" href="#elpis.datasets.process_batch">process_batch</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
