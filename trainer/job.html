@@ -111,7 +111,7 @@ class TrainingJob:
             model_name=data[&#34;model_name&#34;],
             dataset_name=data[&#34;dataset_name&#34;],
             options=TrainingOptions.from_dict(data[&#34;options&#34;]),
-            status=TrainingStatus(data[&#34;status&#34;]),
+            status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
             base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
             sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
         )
@@ -182,7 +182,7 @@ class TrainingJob:
             model_name=data[&#34;model_name&#34;],
             dataset_name=data[&#34;dataset_name&#34;],
             options=TrainingOptions.from_dict(data[&#34;options&#34;]),
-            status=TrainingStatus(data[&#34;status&#34;]),
+            status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
             base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
             sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
         )
@@ -236,7 +236,7 @@ def from_dict(data: Dict[str, Any]) -&gt; TrainingJob:
         model_name=data[&#34;model_name&#34;],
         dataset_name=data[&#34;dataset_name&#34;],
         options=TrainingOptions.from_dict(data[&#34;options&#34;]),
-        status=TrainingStatus(data[&#34;status&#34;]),
+        status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
         base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
         sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
     )</code></pre>
