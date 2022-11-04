@@ -83,7 +83,7 @@ class TrainingJob:
             model_name=data["model_name"],
             dataset_name=data["dataset_name"],
             options=TrainingOptions.from_dict(data["options"]),
-            status=TrainingStatus(data["status"]),
+            status=TrainingStatus(data.get("status", TrainingStatus.WAITING)),
             base_model=data.get("base_model", BASE_MODEL),
             sampling_rate=data.get("sampling_rate", SAMPLING_RATE),
         )
