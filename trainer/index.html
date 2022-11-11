@@ -35,11 +35,19 @@ __all__ = [&#34;TrainingJob&#34;, &#34;TrainingOptions&#34;, &#34;TrainingStatus
 <section>
 <h2 class="section-title" id="header-submodules">Sub-modules</h2>
 <dl>
+<dt><code class="name"><a title="elpis.trainer.data_collator" href="data_collator.html">elpis.trainer.data_collator</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
 <dt><code class="name"><a title="elpis.trainer.job" href="job.html">elpis.trainer.job</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
 <dt><code class="name"><a title="elpis.trainer.trainer" href="trainer.html">elpis.trainer.trainer</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt><code class="name"><a title="elpis.trainer.utils" href="utils.html">elpis.trainer.utils</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -51,7 +59,7 @@ __all__ = [&#34;TrainingJob&#34;, &#34;TrainingOptions&#34;, &#34;TrainingStatus
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="elpis.trainer.train"><code class="name flex">
-<span>def <span class="ident">train</span></span>(<span>job: <a title="elpis.trainer.job.TrainingJob" href="job.html#elpis.trainer.job.TrainingJob">TrainingJob</a>, output_dir: pathlib.Path, dataset_dir: pathlib.Path, cache_dir: Optional[pathlib.Path] = None) ‑> pathlib.Path</span>
+<span>def <span class="ident">train</span></span>(<span>job: <a title="elpis.trainer.job.TrainingJob" href="job.html#elpis.trainer.job.TrainingJob">TrainingJob</a>, output_dir: pathlib.Path, dataset_dir: pathlib.Path, cache_dir: Optional[pathlib.Path] = None, log_file: Optional[pathlib.Path] = None) ‑> pathlib.Path</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Trains a model for use in transcription.</p>
@@ -59,7 +67,8 @@ __all__ = [&#34;TrainingJob&#34;, &#34;TrainingOptions&#34;, &#34;TrainingStatus
 <p>job: Info about the training job, e.g. training options.
 output_dir: Where to save the trained model.
 dataset_dir: A directory containing the preprocessed dataset to train with.
-cache_dir: A directory to use for caching HFT downloads and datasets.</p>
+cache_dir: A directory to use for caching HFT downloads and datasets.
+log_file: An optional file to write training logs to.</p>
 <h2 id="returns">Returns</h2>
 <p>A path to the folder containing the trained model.</p></div>
 <details class="source">
@@ -71,6 +80,7 @@ cache_dir: A directory to use for caching HFT downloads and datasets.</p>
     output_dir: Path,
     dataset_dir: Path,
     cache_dir: Optional[Path] = None,
+    log_file: Optional[Path] = None,
 ) -&gt; Path:
     &#34;&#34;&#34;Trains a model for use in transcription.
 
@@ -79,50 +89,57 @@ cache_dir: A directory to use for caching HFT downloads and datasets.</p>
         output_dir: Where to save the trained model.
         dataset_dir: A directory containing the preprocessed dataset to train with.
         cache_dir: A directory to use for caching HFT downloads and datasets.
+        log_file: An optional file to write training logs to.
 
     Returns:
         A path to the folder containing the trained model.
     &#34;&#34;&#34;
-    logger.info(&#34;Preparing Datasets...&#34;)
-    dataset = create_dataset(dataset_dir, cache_dir)
-    processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
-    dataset = prepare_dataset(dataset, processor)
-    logger.info(&#34;Finished Preparing Datasets&#34;)
 
-    logger.info(&#34;Downloading pretrained model...&#34;)
-    model = AutoModelForCTC.from_pretrained(
-        job.base_model,
-        cache_dir=cache_dir,
-        ctc_loss_reduction=&#34;mean&#34;,
-        pad_token_id=processor.tokenizer.pad_token_id,
-    )
-    logger.info(&#34;Downloaded model.&#34;)
+    @log_to_file(log_file)
+    def _train():
+        logger.info(&#34;Preparing Datasets...&#34;)
+        dataset = create_dataset(dataset_dir, cache_dir)
+        processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
+        dataset = prepare_dataset(dataset, processor)
+        logger.info(&#34;Finished Preparing Datasets&#34;)
 
-    if job.options.freeze_feature_extractor:
-        model.freeze_feature_extractor()
+        logger.info(&#34;Downloading pretrained model...&#34;)
+        model = AutoModelForCTC.from_pretrained(
+            job.base_model,
+            cache_dir=cache_dir,
+            ctc_loss_reduction=&#34;mean&#34;,
+            pad_token_id=processor.tokenizer.pad_token_id,
+        )
+        logger.info(&#34;Downloaded model.&#34;)
 
-    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-    output_dir.mkdir(exist_ok=True, parents=True)
+        if job.options.freeze_feature_extractor:
+            model.freeze_feature_extractor()
 
-    trainer = Trainer(
-        model=model,
-        args=job.to_training_args(output_dir),
-        train_dataset=dataset[&#34;train&#34;],  # type: ignore
-        eval_dataset=dataset[&#34;test&#34;],  # type: ignore
-        tokenizer=processor.feature_extractor,
-        data_collator=data_collator,
-    )
+        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+        output_dir.mkdir(exist_ok=True, parents=True)
 
-    logger.info(f&#34;Begin training model...&#34;)
-    trainer.train()
-    logger.info(f&#34;Finished training!&#34;)
+        trainer = Trainer(
+            model=model,
+            args=job.to_training_args(output_dir),
+            train_dataset=dataset[&#34;train&#34;],  # type: ignore
+            eval_dataset=dataset[&#34;test&#34;],  # type: ignore
+            tokenizer=processor.feature_extractor,
+            data_collator=data_collator,
+        )
 
-    logger.info(f&#34;Saving model @ {output_dir}&#34;)
-    trainer.save_model()
-    trainer.save_state()
-    processor.save_pretrained(output_dir)
-    logger.info(f&#34;Model written to disk.&#34;)
-    return output_dir</code></pre>
+        logger.info(f&#34;Begin training model...&#34;)
+        trainer.train()
+        logger.info(f&#34;Finished training!&#34;)
+
+        logger.info(f&#34;Saving model @ {output_dir}&#34;)
+        trainer.save_model()
+        trainer.save_state()
+        processor.save_pretrained(output_dir)
+        logger.info(f&#34;Model written to disk.&#34;)
+
+        return output_dir
+
+    return _train()</code></pre>
 </details>
 </dd>
 </dl>
@@ -454,8 +471,10 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 </li>
 <li><h3><a href="#header-submodules">Sub-modules</a></h3>
 <ul>
+<li><code><a title="elpis.trainer.data_collator" href="data_collator.html">elpis.trainer.data_collator</a></code></li>
 <li><code><a title="elpis.trainer.job" href="job.html">elpis.trainer.job</a></code></li>
 <li><code><a title="elpis.trainer.trainer" href="trainer.html">elpis.trainer.trainer</a></code></li>
+<li><code><a title="elpis.trainer.utils" href="utils.html">elpis.trainer.utils</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
