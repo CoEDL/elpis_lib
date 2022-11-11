@@ -1,13 +1,13 @@
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional
 
-import torch
 from loguru import logger
-from transformers import AutoModelForCTC, AutoProcessor, Trainer, Wav2Vec2Processor
+from transformers import AutoModelForCTC, AutoProcessor, Trainer
 
 from elpis.datasets import create_dataset, prepare_dataset
+from elpis.trainer.data_collator import DataCollatorCTCWithPadding
 from elpis.trainer.job import TrainingJob
+from elpis.trainer.utils import log_to_file
 
 
 def train(
@@ -15,6 +15,7 @@ def train(
     output_dir: Path,
     dataset_dir: Path,
     cache_dir: Optional[Path] = None,
+    log_file: Optional[Path] = None,
 ) -> Path:
     """Trains a model for use in transcription.
 
@@ -23,92 +24,54 @@ def train(
         output_dir: Where to save the trained model.
         dataset_dir: A directory containing the preprocessed dataset to train with.
         cache_dir: A directory to use for caching HFT downloads and datasets.
+        log_file: An optional file to write training logs to.
 
     Returns:
         A path to the folder containing the trained model.
     """
-    logger.info("Preparing Datasets...")
-    dataset = create_dataset(dataset_dir, cache_dir)
-    processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
-    dataset = prepare_dataset(dataset, processor)
-    logger.info("Finished Preparing Datasets")
 
-    logger.info("Downloading pretrained model...")
-    model = AutoModelForCTC.from_pretrained(
-        job.base_model,
-        cache_dir=cache_dir,
-        ctc_loss_reduction="mean",
-        pad_token_id=processor.tokenizer.pad_token_id,
-    )
-    logger.info("Downloaded model.")
+    @log_to_file(log_file)
+    def _train():
+        logger.info("Preparing Datasets...")
+        dataset = create_dataset(dataset_dir, cache_dir)
+        processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
+        dataset = prepare_dataset(dataset, processor)
+        logger.info("Finished Preparing Datasets")
 
-    if job.options.freeze_feature_extractor:
-        model.freeze_feature_extractor()
-
-    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-    output_dir.mkdir(exist_ok=True, parents=True)
-
-    trainer = Trainer(
-        model=model,
-        args=job.to_training_args(output_dir),
-        train_dataset=dataset["train"],  # type: ignore
-        eval_dataset=dataset["test"],  # type: ignore
-        tokenizer=processor.feature_extractor,
-        data_collator=data_collator,
-    )
-
-    logger.info(f"Begin training model...")
-    trainer.train()
-    logger.info(f"Finished training!")
-
-    logger.info(f"Saving model @ {output_dir}")
-    trainer.save_model()
-    trainer.save_state()
-    processor.save_pretrained(output_dir)
-    logger.info(f"Model written to disk.")
-    return output_dir
-
-
-@dataclass
-class DataCollatorCTCWithPadding:
-    processor: Wav2Vec2Processor
-    padding: Union[bool, str] = True
-    max_length: Optional[int] = None
-    max_length_labels: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
-    pad_to_multiple_of_labels: Optional[int] = None
-
-    def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
-    ) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lenghts and need
-        # different padding methods
-        input_features = [
-            {"input_values": feature["input_values"]} for feature in features
-        ]
-        label_features = [{"input_ids": feature["labels"]} for feature in features]
-
-        batch = self.processor.pad(
-            input_features,
-            padding=self.padding,
-            max_length=self.max_length,
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+        logger.info("Downloading pretrained model...")
+        model = AutoModelForCTC.from_pretrained(
+            job.base_model,
+            cache_dir=cache_dir,
+            ctc_loss_reduction="mean",
+            pad_token_id=processor.tokenizer.pad_token_id,
         )
-        with self.processor.as_target_processor():
-            labels_batch = self.processor.pad(
-                label_features,
-                padding=self.padding,
-                max_length=self.max_length_labels,
-                pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                return_tensors="pt",
-            )
+        logger.info("Downloaded model.")
 
-        # replace padding with -100 to ignore loss correctly
-        labels = labels_batch["input_ids"].masked_fill(
-            labels_batch.attention_mask.ne(1), -100
+        if job.options.freeze_feature_extractor:
+            model.freeze_feature_extractor()
+
+        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+        output_dir.mkdir(exist_ok=True, parents=True)
+
+        trainer = Trainer(
+            model=model,
+            args=job.to_training_args(output_dir),
+            train_dataset=dataset["train"],  # type: ignore
+            eval_dataset=dataset["test"],  # type: ignore
+            tokenizer=processor.feature_extractor,
+            data_collator=data_collator,
         )
 
-        batch["labels"] = labels
+        logger.info(f"Begin training model...")
+        trainer.train()
+        logger.info(f"Finished training!")
 
-        return batch
+        logger.info(f"Saving model @ {output_dir}")
+        trainer.save_model()
+        trainer.save_state()
+        processor.save_pretrained(output_dir)
+        logger.info(f"Model written to disk.")
+
+        return output_dir
+
+    return _train()

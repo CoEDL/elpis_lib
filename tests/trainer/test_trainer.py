@@ -24,8 +24,12 @@ def test_training(tmp_path: Path):
     output_dir = tmp_path / "out"
     output_dir.mkdir(exist_ok=True, parents=True)
 
+    log_file = tmp_path / "logs.txt"
+
     for file in os.listdir(DATASET_PATH):
         shutil.copy(DATASET_PATH / file, dataset_dir)
 
-    model_path = train(job=JOB, output_dir=output_dir, dataset_dir=dataset_dir)
+    model_path = train(
+        job=JOB, output_dir=output_dir, dataset_dir=dataset_dir, log_file=log_file
+    )
     assert model_path == output_dir
