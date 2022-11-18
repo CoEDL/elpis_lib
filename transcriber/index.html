@@ -74,7 +74,10 @@ tier_name: The name of the tier to add the annotations under.</p>
     result.add_tier(tier_name)
     for annotation in annotations:
         result.add_annotation(
-            id_tier=tier_name, start=annotation.start_ms, end=annotation.stop_ms
+            id_tier=tier_name,
+            start=annotation.start_ms,
+            end=annotation.stop_ms,
+            value=annotation.transcript,
         )
     return result</code></pre>
 </details>
@@ -163,30 +166,32 @@ start time.</p>
 </details>
 </dd>
 <dt id="elpis.transcriber.transcribe"><code class="name flex">
-<span>def <span class="ident">transcribe</span></span>(<span>audio: pathlib.Path, asr: transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline) ‑> List[<a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a>]</span>
+<span>def <span class="ident">transcribe</span></span>(<span>audio: pathlib.Path, asr: transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline, chunk_length_s=10) ‑> List[<a title="elpis.models.annotation.Annotation" href="../models/annotation.html#elpis.models.annotation.Annotation">Annotation</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Transcribes the given audio and gives back the resulting annotations.</p>
 <h2 id="parameters">Parameters</h2>
 <p>audio: The path to the audio file to transcribe.
-asr: The automatic speech recognition pipeline.</p>
+asr: The automatic speech recognition pipeline.
+chunk_length_s: The amount of seconds per audio chunk in the pipeline.</p>
 <h2 id="returns">Returns</h2>
 <p>A list of the inferred annotations in the given audio.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def transcribe(audio: Path, asr: ASRPipeline) -&gt; List[Annotation]:
+<pre><code class="python">def transcribe(audio: Path, asr: ASRPipeline, chunk_length_s=10) -&gt; List[Annotation]:
     &#34;&#34;&#34;Transcribes the given audio and gives back the resulting annotations.
 
     Parameters:
         audio: The path to the audio file to transcribe.
         asr: The automatic speech recognition pipeline.
+        chunk_length_s: The amount of seconds per audio chunk in the pipeline.
 
     Returns:
         A list of the inferred annotations in the given audio.
     &#34;&#34;&#34;
-    preds: Dict[str, Any] = asr(str(audio), return_timestamps=&#34;word&#34;)  # type: ignore
+    preds: Dict[str, Any] = asr(str(audio), chunk_length_s=chunk_length_s, return_timestamps=&#34;word&#34;)  # type: ignore
     chunks = preds[&#34;chunks&#34;]
 
     return list(map(lambda chunk: annotation_from_chunk(chunk, audio), chunks))</code></pre>
