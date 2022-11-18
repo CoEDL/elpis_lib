@@ -19,7 +19,10 @@ def build_elan(annotations: List[Annotation], tier_name: str = "Phrase") -> Eaf:
     result.add_tier(tier_name)
     for annotation in annotations:
         result.add_annotation(
-            id_tier=tier_name, start=annotation.start_ms, end=annotation.stop_ms
+            id_tier=tier_name,
+            start=annotation.start_ms,
+            end=annotation.stop_ms,
+            value=annotation.transcript,
         )
     return result
 
