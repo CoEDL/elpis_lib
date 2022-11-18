@@ -42,17 +42,18 @@ def build_pipeline(
     )  # type: ignore
 
 
-def transcribe(audio: Path, asr: ASRPipeline) -> List[Annotation]:
+def transcribe(audio: Path, asr: ASRPipeline, chunk_length_s=10) -> List[Annotation]:
     """Transcribes the given audio and gives back the resulting annotations.
 
     Parameters:
         audio: The path to the audio file to transcribe.
         asr: The automatic speech recognition pipeline.
+        chunk_length_s: The amount of seconds per audio chunk in the pipeline.
 
     Returns:
         A list of the inferred annotations in the given audio.
     """
-    preds: Dict[str, Any] = asr(str(audio), return_timestamps="word")  # type: ignore
+    preds: Dict[str, Any] = asr(str(audio), chunk_length_s=chunk_length_s, return_timestamps="word")  # type: ignore
     chunks = preds["chunks"]
 
     return list(map(lambda chunk: annotation_from_chunk(chunk, audio), chunks))
