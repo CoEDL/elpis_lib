@@ -1,49 +1,35 @@
 import logging
-from functools import wraps
+from contextlib import contextmanager
 from logging.handlers import WatchedFileHandler
 from pathlib import Path
-from typing import Callable, Optional
 
 import transformers
 from loguru import logger
 
 
-def log_to_file(log_file: Optional[Path]) -> Callable[[Callable], Callable]:
-    """Returns a decorator that will output the logs of a captured function
-    to a log file, if it exists.
+@contextmanager
+def log_to_file(log_file: Path):
+    """A context manager which logs its captured runtime to the provided file."""
+    sink_id = logger.add(log_file)
 
-    Args:
-        log_file: The optional file to log to.
-    """
+    handler = WatchedFileHandler(str(log_file))
+    formatter = logging.Formatter(
+        fmt="%(asctime)s.%(msecs)03d | %(levelname)s | (HF) %(name)s |   %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    handler.setFormatter(formatter)
+    handler.setLevel(logging.INFO)
 
-    def log_wrapper(func: Callable) -> Callable:
-        @wraps(func)
-        def function_wrapper(*args, **kwargs):
-            if log_file is None:
-                return func(*args, **kwargs)
+    logging.root.addHandler(handler)
 
-            sink_id = logger.add(log_file)
+    # Propagate huggingface logs to logging root.
+    transformers.logging.set_verbosity_info()
+    transformers.logging.enable_propagation()
 
-            # Configure huggingface logging handler
-            formatter = logging.Formatter(
-                fmt="%(asctime)s.%(msecs)03d | %(levelname)s | (HF) %(name)s |   %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-            handler = WatchedFileHandler(str(log_file))
-            handler.setFormatter(formatter)
-            handler.setLevel(logging.INFO)
-
-            logging.root.addHandler(handler)
-            transformers.logging.set_verbosity_info()
-            transformers.logging.enable_propagation()
-
-            result = func(*args, **kwargs)
-            # Flush and teardown logging handlers
-            logger.remove(sink_id)
-            handler.flush()
-            logging.root.removeHandler(handler)
-            return result
-
-        return function_wrapper
-
-    return log_wrapper
+    try:
+        yield log_file
+    finally:
+        # Flush and teardown logging handlers
+        logger.remove(sink_id)
+        handler.flush()
+        logging.root.removeHandler(handler)

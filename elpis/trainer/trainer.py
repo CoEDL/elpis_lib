@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
 
@@ -30,8 +31,8 @@ def train(
         A path to the folder containing the trained model.
     """
 
-    @log_to_file(log_file)
-    def _train():
+    context = log_to_file(log_file) if log_file is not None else nullcontext()
+    with context:
         logger.info("Preparing Datasets...")
         dataset = create_dataset(dataset_dir, cache_dir)
         processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
@@ -73,5 +74,3 @@ def train(
         logger.info(f"Model written to disk.")
 
         return output_dir
-
-    return _train()
