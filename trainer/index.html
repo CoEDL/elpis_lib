@@ -95,8 +95,8 @@ log_file: An optional file to write training logs to.</p>
         A path to the folder containing the trained model.
     &#34;&#34;&#34;
 
-    @log_to_file(log_file)
-    def _train():
+    context = log_to_file(log_file) if log_file is not None else nullcontext()
+    with context:
         logger.info(&#34;Preparing Datasets...&#34;)
         dataset = create_dataset(dataset_dir, cache_dir)
         processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
@@ -137,9 +137,7 @@ log_file: An optional file to write training logs to.</p>
         processor.save_pretrained(output_dir)
         logger.info(f&#34;Model written to disk.&#34;)
 
-        return output_dir
-
-    return _train()</code></pre>
+        return output_dir</code></pre>
 </details>
 </dd>
 </dl>

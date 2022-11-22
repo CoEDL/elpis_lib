@@ -27,54 +27,40 @@
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">import logging
-from functools import wraps
+from contextlib import contextmanager
 from logging.handlers import WatchedFileHandler
 from pathlib import Path
-from typing import Callable, Optional
 
 import transformers
 from loguru import logger
 
 
-def log_to_file(log_file: Optional[Path]) -&gt; Callable[[Callable], Callable]:
-    &#34;&#34;&#34;Returns a decorator that will output the logs of a captured function
-    to a log file, if it exists.
+@contextmanager
+def log_to_file(log_file: Path):
+    &#34;&#34;&#34;A context manager which logs its captured runtime to the provided file.&#34;&#34;&#34;
+    sink_id = logger.add(log_file)
 
-    Args:
-        log_file: The optional file to log to.
-    &#34;&#34;&#34;
+    handler = WatchedFileHandler(str(log_file))
+    formatter = logging.Formatter(
+        fmt=&#34;%(asctime)s.%(msecs)03d | %(levelname)s | (HF) %(name)s |   %(message)s&#34;,
+        datefmt=&#34;%Y-%m-%d %H:%M:%S&#34;,
+    )
+    handler.setFormatter(formatter)
+    handler.setLevel(logging.INFO)
 
-    def log_wrapper(func: Callable) -&gt; Callable:
-        @wraps(func)
-        def function_wrapper(*args, **kwargs):
-            if log_file is None:
-                return func(*args, **kwargs)
+    logging.root.addHandler(handler)
 
-            sink_id = logger.add(log_file)
+    # Propagate huggingface logs to logging root.
+    transformers.logging.set_verbosity_info()
+    transformers.logging.enable_propagation()
 
-            # Configure huggingface logging handler
-            formatter = logging.Formatter(
-                fmt=&#34;%(asctime)s.%(msecs)03d | %(levelname)s | (HF) %(name)s |   %(message)s&#34;,
-                datefmt=&#34;%Y-%m-%d %H:%M:%S&#34;,
-            )
-            handler = WatchedFileHandler(str(log_file))
-            handler.setFormatter(formatter)
-            handler.setLevel(logging.INFO)
-
-            logging.root.addHandler(handler)
-            transformers.logging.set_verbosity_info()
-            transformers.logging.enable_propagation()
-
-            result = func(*args, **kwargs)
-            # Flush and teardown logging handlers
-            logger.remove(sink_id)
-            handler.flush()
-            logging.root.removeHandler(handler)
-            return result
-
-        return function_wrapper
-
-    return log_wrapper</code></pre>
+    try:
+        yield log_file
+    finally:
+        # Flush and teardown logging handlers
+        logger.remove(sink_id)
+        handler.flush()
+        logging.root.removeHandler(handler)</code></pre>
 </details>
 </section>
 <section>
@@ -85,59 +71,40 @@ def log_to_file(log_file: Optional[Path]) -&gt; Callable[[Callable], Callable]:
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="elpis.trainer.utils.log_to_file"><code class="name flex">
-<span>def <span class="ident">log_to_file</span></span>(<span>log_file: Optional[pathlib.Path]) ‑> Callable[[Callable], Callable]</span>
+<span>def <span class="ident">log_to_file</span></span>(<span>log_file: pathlib.Path)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Returns a decorator that will output the logs of a captured function
-to a log file, if it exists.</p>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>log_file</code></strong></dt>
-<dd>The optional file to log to.</dd>
-</dl></div>
+<div class="desc"><p>A context manager which logs its captured runtime to the provided file.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def log_to_file(log_file: Optional[Path]) -&gt; Callable[[Callable], Callable]:
-    &#34;&#34;&#34;Returns a decorator that will output the logs of a captured function
-    to a log file, if it exists.
+<pre><code class="python">@contextmanager
+def log_to_file(log_file: Path):
+    &#34;&#34;&#34;A context manager which logs its captured runtime to the provided file.&#34;&#34;&#34;
+    sink_id = logger.add(log_file)
 
-    Args:
-        log_file: The optional file to log to.
-    &#34;&#34;&#34;
+    handler = WatchedFileHandler(str(log_file))
+    formatter = logging.Formatter(
+        fmt=&#34;%(asctime)s.%(msecs)03d | %(levelname)s | (HF) %(name)s |   %(message)s&#34;,
+        datefmt=&#34;%Y-%m-%d %H:%M:%S&#34;,
+    )
+    handler.setFormatter(formatter)
+    handler.setLevel(logging.INFO)
 
-    def log_wrapper(func: Callable) -&gt; Callable:
-        @wraps(func)
-        def function_wrapper(*args, **kwargs):
-            if log_file is None:
-                return func(*args, **kwargs)
+    logging.root.addHandler(handler)
 
-            sink_id = logger.add(log_file)
+    # Propagate huggingface logs to logging root.
+    transformers.logging.set_verbosity_info()
+    transformers.logging.enable_propagation()
 
-            # Configure huggingface logging handler
-            formatter = logging.Formatter(
-                fmt=&#34;%(asctime)s.%(msecs)03d | %(levelname)s | (HF) %(name)s |   %(message)s&#34;,
-                datefmt=&#34;%Y-%m-%d %H:%M:%S&#34;,
-            )
-            handler = WatchedFileHandler(str(log_file))
-            handler.setFormatter(formatter)
-            handler.setLevel(logging.INFO)
-
-            logging.root.addHandler(handler)
-            transformers.logging.set_verbosity_info()
-            transformers.logging.enable_propagation()
-
-            result = func(*args, **kwargs)
-            # Flush and teardown logging handlers
-            logger.remove(sink_id)
-            handler.flush()
-            logging.root.removeHandler(handler)
-            return result
-
-        return function_wrapper
-
-    return log_wrapper</code></pre>
+    try:
+        yield log_file
+    finally:
+        # Flush and teardown logging handlers
+        logger.remove(sink_id)
+        handler.flush()
+        logging.root.removeHandler(handler)</code></pre>
 </details>
 </dd>
 </dl>
