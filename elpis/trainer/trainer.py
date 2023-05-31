@@ -73,4 +73,10 @@ def train(
         processor.save_pretrained(output_dir)
         logger.info(f"Model written to disk.")
 
+        metrics = trainer.evaluate()
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
+        logger.info("==== Metrics ====")
+        logger.info(metrics)
+
         return output_dir
