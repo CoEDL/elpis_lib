@@ -29,10 +29,10 @@ def log_to_file(log_file: Path):
     transformer_logging.disable_default_handler()
 
     # Log stderr to log file to capture tqdm logs
-    with open(log_file, 'a') as stderr_hole:
+    with open(log_file, "a") as stderr_hole:
         original_stderr = sys.stderr
         try:
-            sys.stderr = stderr_hole 
+            sys.stderr = stderr_hole
             yield log_file
         finally:
             sys.stderr = original_stderr
