@@ -137,6 +137,12 @@ log_file: An optional file to write training logs to.</p>
         processor.save_pretrained(output_dir)
         logger.info(f&#34;Model written to disk.&#34;)
 
+        metrics = trainer.evaluate()
+        trainer.log_metrics(&#34;eval&#34;, metrics)
+        trainer.save_metrics(&#34;eval&#34;, metrics)
+        logger.info(&#34;==== Metrics ====&#34;)
+        logger.info(metrics)
+
         return output_dir</code></pre>
 </details>
 </dd>
