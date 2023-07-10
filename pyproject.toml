@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "elpis"
-version = "0.1.5"
+version = "0.1.6"
 description = """\
   A library to perform automatic speech recognition with huggingface transformers.\
   """
