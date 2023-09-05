@@ -2,8 +2,7 @@ from typing import Callable, Dict, Optional, Sequence
 
 import evaluate
 from transformers import EvalPrediction
-#from transformers.integrations import np
-import numpy as np
+from transformers.integrations import np
 
 
 def create_metrics(
