@@ -1,3 +1,4 @@
+from itertools import chain
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -61,6 +62,7 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -> Datas
     """
 
     def prepare_dataset(batch: Dict) -> Dict[str, List]:
+        # Also from https://huggingface.co/blog/fine-tune-xlsr-wav2vec2
         audio = batch["audio"]
 
         batch["input_values"] = processor(
@@ -73,8 +75,13 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -> Datas
 
         return batch
 
+    column_names = [dataset.column_names[key] for key in dataset.column_names.keys()]
+    # flatten
+    columns_to_remove = list(chain.from_iterable(column_names))
+
+
     return dataset.map(
         prepare_dataset,
-        remove_columns=dataset.column_names["train"],
+        remove_columns=columns_to_remove,
         num_proc=PROCESSOR_COUNT,
     )

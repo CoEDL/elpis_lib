@@ -47,6 +47,13 @@ def train(
             cache_dir=cache_dir,
             ctc_loss_reduction="mean",
             pad_token_id=processor.tokenizer.pad_token_id,
+            # From https://huggingface.co/blog/fine-tune-xlsr-wav2vec2
+            # attention_dropout=0.0,
+            # hidden_dropout=0.0,
+            # feat_proj_dropout=0.0,
+            # mask_time_prob=0.05,
+            # layerdrop=0.0,
+            # vocab_size=len(processor.tokenizer),
         )
         logger.info("Downloaded model.")
 
@@ -76,8 +83,8 @@ def train(
         processor.save_pretrained(output_dir)
         logger.info(f"Model written to disk.")
 
-        # metrics = trainer.evaluate()
-        # logger.error(metrics)
+        metrics = trainer.evaluate()
+        logger.error(metrics)
         # trainer.log_metrics("eval", metrics)
         # trainer.save_metrics("eval", metrics)
         # logger.info("==== Metrics ====")

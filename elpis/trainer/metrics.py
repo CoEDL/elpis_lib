@@ -2,7 +2,7 @@ from typing import Callable, Dict, Optional, Sequence
 
 import evaluate
 import numpy as np
-from tokenizers import Tokenizer
+from loguru import logger
 from transformers import EvalPrediction, Wav2Vec2Processor
 
 
@@ -13,20 +13,27 @@ def create_metrics(
     if len(metric_names) == 0:
         return
 
-    metrics = evaluate.combine([evaluate.load(metric) for metric in metric_names])
+    # Note: was using evaluate.combine but was having many unexpected errors.
+    metrics = {name: evaluate.load(name) for name in metric_names}
 
     def compute_metrics(pred: EvalPrediction) -> Dict:
         # taken from https://huggingface.co/blog/fine-tune-xlsr-wav2vec2
         pred_logits = pred.predictions
-        pred_ids = np.argmax(pred_logits, axis=-1)
 
         pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id  # type: ignore
 
-        pred_str = processor.batch_decode(pred_ids)
+        # Taken from: https://discuss.huggingface.co/t/code-review-compute-metrics-for-wer-with-wav2vec2processorwithlm/16841/3
+        if type(processor).__name__ == "Wav2Vec2ProcessorWithLM":
+            pred_str = processor.batch_decode(pred_logits).text
+        else:
+            pred_ids = np.argmax(pred_logits, axis=-1)
+            pred_str = processor.batch_decode(pred_ids)
 
-        # we do not want to group tokens when computing the metrics
+        # We do not want to group tokens when computing the metrics
         label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
-        return metrics.compute(predictions=pred_str, references=label_str)
+        result = {name: metric.compute(predictions=pred_str, references=label_str) for name, metric in metrics.items()} 
+        logger.warning(f"Result: {result}")
+        return result 
 
     return compute_metrics
