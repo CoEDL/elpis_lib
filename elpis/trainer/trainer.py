@@ -20,7 +20,7 @@ def train(
     cache_dir: Optional[Path] = None,
     log_file: Optional[Path] = None,
 ) -> Path:
-    """Trains a model for use in transcription.
+    """Fine-tunes a model for use in transcription.
 
     Parameters:
         job: Info about the training job, e.g. training options.
@@ -85,9 +85,9 @@ def train(
 
         metrics = trainer.evaluate()
         logger.error(metrics)
-        # trainer.log_metrics("eval", metrics)
-        # trainer.save_metrics("eval", metrics)
-        # logger.info("==== Metrics ====")
-        # logger.info(metrics)
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
+        logger.info("==== Metrics ====")
+        logger.info(metrics)
 
         return output_dir
