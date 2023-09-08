@@ -1,16 +1,71 @@
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
+from datasets import DatasetDict
 from loguru import logger
-from tokenizers import Tokenizer
-from transformers import AutoModelForCTC, AutoProcessor, EvalPrediction, Trainer
+from transformers import (
+    AutoModelForCTC,
+    AutoProcessor,
+    Trainer,
+    Wav2Vec2CTCTokenizer,
+    Wav2Vec2FeatureExtractor,
+    Wav2Vec2Processor,
+)
 
 from elpis.datasets import create_dataset, prepare_dataset
+from elpis.models.vocab import Vocab
 from elpis.trainer.data_collator import DataCollatorCTCWithPadding
 from elpis.trainer.job import TrainingJob
 from elpis.trainer.metrics import create_metrics
 from elpis.trainer.utils import log_to_file
+
+
+def create_processor(
+    job: TrainingJob,
+    output_dir: Path,
+    dataset: DatasetDict,
+    cache_dir: Optional[Path],
+) -> Wav2Vec2Processor:
+    if "wav2vec2" in job.base_model:
+        return create_wav2vec2_processor(output_dir, dataset, cache_dir)
+
+    return AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
+
+
+def create_wav2vec2_processor(
+    output_dir: Path,
+    dataset: DatasetDict,
+    cache_dir: Optional[Path],
+    unk_token="[UNK]",
+    pad_token="[PAD]",
+    delimiter_token="|",
+) -> Wav2Vec2Processor:
+    # Build up a vocab from the training data.
+    vocab = Vocab.from_strings(dataset["train"]["transcript"])
+    vocab.add(unk_token)
+    vocab.add(pad_token)
+    vocab.replace(" ", delimiter_token)  # feels a little restrictive?
+    vocab.save(output_dir)
+
+    # Create tokenizer
+    tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+        output_dir,
+        unk_token=unk_token,
+        pad_token=pad_token,
+        word_delimiter_token=delimiter_token,
+        cache_dir=cache_dir,
+    )
+
+    feature_extractor = Wav2Vec2FeatureExtractor(
+        feature_size=1,
+        sampling_rate=16000,
+        padding_value=0.0,
+        do_normalize=True,
+        return_attention_mask=True,
+    )
+
+    return Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
 
 def train(
@@ -37,7 +92,7 @@ def train(
     with context:
         logger.info("Preparing Datasets...")
         dataset = create_dataset(dataset_dir, cache_dir)
-        processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
+        processor = create_processor(job, output_dir, dataset, cache_dir)
         dataset = prepare_dataset(dataset, processor)
         logger.info("Finished Preparing Datasets")
 
@@ -46,7 +101,7 @@ def train(
             job.base_model,
             cache_dir=cache_dir,
             ctc_loss_reduction="mean",
-            pad_token_id=processor.tokenizer.pad_token_id,
+            pad_token_id=processor.tokenizer.pad_token_id, # type: ignore
         )
         logger.info("Downloaded model.")
 
@@ -61,7 +116,7 @@ def train(
             args=job.to_training_args(output_dir),
             train_dataset=dataset["train"],  # type: ignore
             eval_dataset=dataset["test"],  # type: ignore
-            tokenizer=processor.feature_extractor,
+            tokenizer=processor.feature_extractor, #type: ignore
             data_collator=data_collator,
             compute_metrics=create_metrics(job.metrics, processor),
         )
