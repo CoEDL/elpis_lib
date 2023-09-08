@@ -22,12 +22,12 @@ def create_metrics(
 
         pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id  # type: ignore
 
-        # # Taken from: https://discuss.huggingface.co/t/code-review-compute-metrics-for-wer-with-wav2vec2processorwithlm/16841/3
-        # if type(processor).__name__ == "Wav2Vec2ProcessorWithLM":
-        #     pred_str = processor.batch_decode(pred_logits).text
-        # else:
-        pred_ids = np.argmax(pred_logits, axis=-1)
-        pred_str = processor.batch_decode(pred_ids)
+        # Taken from: https://discuss.huggingface.co/t/code-review-compute-metrics-for-wer-with-wav2vec2processorwithlm/16841/3
+        if type(processor).__name__ == "Wav2Vec2ProcessorWithLM":
+            pred_str = processor.batch_decode(pred_logits).text
+        else:
+            pred_ids = np.argmax(pred_logits, axis=-1)
+            pred_str = processor.batch_decode(pred_ids)
 
         # We do not want to group tokens when computing the metrics
         label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
