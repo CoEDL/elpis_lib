@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import torch
 from transformers import TrainingArguments
 
 BASE_MODEL = "facebook/wav2vec2-base-960h"
 SAMPLING_RATE = 16_000
+METRICS = ("wer", "cer")
 
 
 class TrainingStatus(Enum):
@@ -52,6 +53,7 @@ class TrainingJob:
     status: TrainingStatus = TrainingStatus.WAITING
     base_model: str = BASE_MODEL
     sampling_rate: int = SAMPLING_RATE
+    metrics: Tuple[str, ...] = METRICS
 
     def to_training_args(self, output_dir: Path, **kwargs) -> TrainingArguments:
         return TrainingArguments(
@@ -86,6 +88,7 @@ class TrainingJob:
             status=TrainingStatus(data.get("status", TrainingStatus.WAITING)),
             base_model=data.get("base_model", BASE_MODEL),
             sampling_rate=data.get("sampling_rate", SAMPLING_RATE),
+            metrics=data.get("metrics", METRICS),
         )
 
     def to_dict(self) -> Dict[str, Any]:

@@ -1,13 +1,15 @@
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from loguru import logger
-from transformers import AutoModelForCTC, AutoProcessor, Trainer
+from tokenizers import Tokenizer
+from transformers import AutoModelForCTC, AutoProcessor, EvalPrediction, Trainer
 
 from elpis.datasets import create_dataset, prepare_dataset
 from elpis.trainer.data_collator import DataCollatorCTCWithPadding
 from elpis.trainer.job import TrainingJob
+from elpis.trainer.metrics import create_metrics
 from elpis.trainer.utils import log_to_file
 
 
@@ -18,7 +20,7 @@ def train(
     cache_dir: Optional[Path] = None,
     log_file: Optional[Path] = None,
 ) -> Path:
-    """Trains a model for use in transcription.
+    """Fine-tunes a model for use in transcription.
 
     Parameters:
         job: Info about the training job, e.g. training options.
@@ -61,6 +63,7 @@ def train(
             eval_dataset=dataset["test"],  # type: ignore
             tokenizer=processor.feature_extractor,
             data_collator=data_collator,
+            compute_metrics=create_metrics(job.metrics, processor),
         )
 
         logger.info(f"Begin training model...")
@@ -74,9 +77,9 @@ def train(
         logger.info(f"Model written to disk.")
 
         metrics = trainer.evaluate()
+        logger.info("==== Metrics ====")
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
-        logger.info("==== Metrics ====")
         logger.info(metrics)
 
         return output_dir
