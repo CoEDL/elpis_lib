@@ -43,6 +43,10 @@ __all__ = [&#34;TrainingJob&#34;, &#34;TrainingOptions&#34;, &#34;TrainingStatus
 <dd>
 <div class="desc"></div>
 </dd>
+<dt><code class="name"><a title="elpis.trainer.metrics" href="metrics.html">elpis.trainer.metrics</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
 <dt><code class="name"><a title="elpis.trainer.trainer" href="trainer.html">elpis.trainer.trainer</a></code></dt>
 <dd>
 <div class="desc"></div>
@@ -62,7 +66,7 @@ __all__ = [&#34;TrainingJob&#34;, &#34;TrainingOptions&#34;, &#34;TrainingStatus
 <span>def <span class="ident">train</span></span>(<span>job: <a title="elpis.trainer.job.TrainingJob" href="job.html#elpis.trainer.job.TrainingJob">TrainingJob</a>, output_dir: pathlib.Path, dataset_dir: pathlib.Path, cache_dir: Optional[pathlib.Path] = None, log_file: Optional[pathlib.Path] = None) ‑> pathlib.Path</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Trains a model for use in transcription.</p>
+<div class="desc"><p>Fine-tunes a model for use in transcription.</p>
 <h2 id="parameters">Parameters</h2>
 <p>job: Info about the training job, e.g. training options.
 output_dir: Where to save the trained model.
@@ -82,7 +86,7 @@ log_file: An optional file to write training logs to.</p>
     cache_dir: Optional[Path] = None,
     log_file: Optional[Path] = None,
 ) -&gt; Path:
-    &#34;&#34;&#34;Trains a model for use in transcription.
+    &#34;&#34;&#34;Fine-tunes a model for use in transcription.
 
     Parameters:
         job: Info about the training job, e.g. training options.
@@ -125,6 +129,7 @@ log_file: An optional file to write training logs to.</p>
             eval_dataset=dataset[&#34;test&#34;],  # type: ignore
             tokenizer=processor.feature_extractor,
             data_collator=data_collator,
+            compute_metrics=create_metrics(job.metrics, processor),
         )
 
         logger.info(f&#34;Begin training model...&#34;)
@@ -138,9 +143,9 @@ log_file: An optional file to write training logs to.</p>
         logger.info(f&#34;Model written to disk.&#34;)
 
         metrics = trainer.evaluate()
+        logger.info(&#34;==== Metrics ====&#34;)
         trainer.log_metrics(&#34;eval&#34;, metrics)
         trainer.save_metrics(&#34;eval&#34;, metrics)
-        logger.info(&#34;==== Metrics ====&#34;)
         logger.info(metrics)
 
         return output_dir</code></pre>
@@ -153,7 +158,7 @@ log_file: An optional file to write training logs to.</p>
 <dl>
 <dt id="elpis.trainer.TrainingJob"><code class="flex name class">
 <span>class <span class="ident">TrainingJob</span></span>
-<span>(</span><span>model_name: str, dataset_name: str, options: <a title="elpis.trainer.TrainingOptions" href="#elpis.trainer.TrainingOptions">TrainingOptions</a>, status: <a title="elpis.trainer.TrainingStatus" href="#elpis.trainer.TrainingStatus">TrainingStatus</a> = TrainingStatus.WAITING, base_model: str = 'facebook/wav2vec2-base-960h', sampling_rate: int = 16000)</span>
+<span>(</span><span>model_name: str, dataset_name: str, options: <a title="elpis.trainer.TrainingOptions" href="#elpis.trainer.TrainingOptions">TrainingOptions</a>, status: <a title="elpis.trainer.TrainingStatus" href="#elpis.trainer.TrainingStatus">TrainingStatus</a> = TrainingStatus.WAITING, base_model: str = 'facebook/wav2vec2-base-960h', sampling_rate: int = 16000, metrics: Tuple[str, ...] = ('wer', 'cer'))</span>
 </code></dt>
 <dd>
 <div class="desc"><p>A class representing a training job for a model</p></div>
@@ -171,6 +176,7 @@ class TrainingJob:
     status: TrainingStatus = TrainingStatus.WAITING
     base_model: str = BASE_MODEL
     sampling_rate: int = SAMPLING_RATE
+    metrics: Tuple[str, ...] = METRICS
 
     def to_training_args(self, output_dir: Path, **kwargs) -&gt; TrainingArguments:
         return TrainingArguments(
@@ -205,6 +211,7 @@ class TrainingJob:
             status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
             base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
             sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
+            metrics=data.get(&#34;metrics&#34;, METRICS),
         )
 
     def to_dict(self) -&gt; Dict[str, Any]:
@@ -219,6 +226,10 @@ class TrainingJob:
 <div class="desc"></div>
 </dd>
 <dt id="elpis.trainer.TrainingJob.dataset_name"><code class="name">var <span class="ident">dataset_name</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.trainer.TrainingJob.metrics"><code class="name">var <span class="ident">metrics</span> : Tuple[str, ...]</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -259,6 +270,7 @@ def from_dict(data: Dict[str, Any]) -&gt; TrainingJob:
         status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
         base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
         sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
+        metrics=data.get(&#34;metrics&#34;, METRICS),
     )</code></pre>
 </details>
 </dd>
@@ -477,6 +489,7 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 <ul>
 <li><code><a title="elpis.trainer.data_collator" href="data_collator.html">elpis.trainer.data_collator</a></code></li>
 <li><code><a title="elpis.trainer.job" href="job.html">elpis.trainer.job</a></code></li>
+<li><code><a title="elpis.trainer.metrics" href="metrics.html">elpis.trainer.metrics</a></code></li>
 <li><code><a title="elpis.trainer.trainer" href="trainer.html">elpis.trainer.trainer</a></code></li>
 <li><code><a title="elpis.trainer.utils" href="utils.html">elpis.trainer.utils</a></code></li>
 </ul>
@@ -494,6 +507,7 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 <li><code><a title="elpis.trainer.TrainingJob.base_model" href="#elpis.trainer.TrainingJob.base_model">base_model</a></code></li>
 <li><code><a title="elpis.trainer.TrainingJob.dataset_name" href="#elpis.trainer.TrainingJob.dataset_name">dataset_name</a></code></li>
 <li><code><a title="elpis.trainer.TrainingJob.from_dict" href="#elpis.trainer.TrainingJob.from_dict">from_dict</a></code></li>
+<li><code><a title="elpis.trainer.TrainingJob.metrics" href="#elpis.trainer.TrainingJob.metrics">metrics</a></code></li>
 <li><code><a title="elpis.trainer.TrainingJob.model_name" href="#elpis.trainer.TrainingJob.model_name">model_name</a></code></li>
 <li><code><a title="elpis.trainer.TrainingJob.options" href="#elpis.trainer.TrainingJob.options">options</a></code></li>
 <li><code><a title="elpis.trainer.TrainingJob.sampling_rate" href="#elpis.trainer.TrainingJob.sampling_rate">sampling_rate</a></code></li>

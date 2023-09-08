@@ -27,10 +27,12 @@
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">import os
+from itertools import chain
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from datasets import Audio, DatasetDict, load_dataset
+from loguru import logger
 from transformers import Wav2Vec2Processor
 
 PROCESSOR_COUNT = 4
@@ -88,7 +90,12 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -&gt; Da
         processor: The processor to apply over the dataset
     &#34;&#34;&#34;
 
-    def prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
+    logger.debug(f&#34;Dataset pre prep: {dataset}&#34;)
+    logger.debug(f&#34;Dataset[train] pre prep: {dataset[&#39;train&#39;][&#39;transcript&#39;]}&#34;)
+    logger.debug(f&#34;Tokenizer vocab: {processor.tokenizer.vocab}&#34;)  # type: ignore
+
+    def _prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
+        # Also from https://huggingface.co/blog/fine-tune-xlsr-wav2vec2
         audio = batch[&#34;audio&#34;]
 
         batch[&#34;input_values&#34;] = processor(
@@ -96,16 +103,23 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -&gt; Da
         ).input_values[0]
         batch[&#34;input_length&#34;] = len(batch[&#34;input_values&#34;])
 
-        with processor.as_target_processor():
-            batch[&#34;labels&#34;] = processor(batch[&#34;transcript&#34;]).input_ids
+        batch[&#34;labels&#34;] = processor(text=batch[&#34;transcript&#34;]).input_ids
 
         return batch
 
-    return dataset.map(
-        prepare_dataset,
-        remove_columns=dataset.column_names[&#34;train&#34;],
+    column_names = [dataset.column_names[key] for key in dataset.column_names.keys()]
+    # flatten
+    columns_to_remove = list(chain.from_iterable(column_names))
+
+    dataset = dataset.map(
+        _prepare_dataset,
+        remove_columns=columns_to_remove,
         num_proc=PROCESSOR_COUNT,
-    )</code></pre>
+    )
+
+    logger.debug(f&#34;Dataset post prep: {dataset}&#34;)
+    logger.debug(f&#34;Training labels: {dataset[&#39;train&#39;][&#39;labels&#39;]}&#34;)
+    return dataset</code></pre>
 </details>
 </section>
 <section>
@@ -195,7 +209,12 @@ processor: The processor to apply over the dataset</p></div>
         processor: The processor to apply over the dataset
     &#34;&#34;&#34;
 
-    def prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
+    logger.debug(f&#34;Dataset pre prep: {dataset}&#34;)
+    logger.debug(f&#34;Dataset[train] pre prep: {dataset[&#39;train&#39;][&#39;transcript&#39;]}&#34;)
+    logger.debug(f&#34;Tokenizer vocab: {processor.tokenizer.vocab}&#34;)  # type: ignore
+
+    def _prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
+        # Also from https://huggingface.co/blog/fine-tune-xlsr-wav2vec2
         audio = batch[&#34;audio&#34;]
 
         batch[&#34;input_values&#34;] = processor(
@@ -203,16 +222,23 @@ processor: The processor to apply over the dataset</p></div>
         ).input_values[0]
         batch[&#34;input_length&#34;] = len(batch[&#34;input_values&#34;])
 
-        with processor.as_target_processor():
-            batch[&#34;labels&#34;] = processor(batch[&#34;transcript&#34;]).input_ids
+        batch[&#34;labels&#34;] = processor(text=batch[&#34;transcript&#34;]).input_ids
 
         return batch
 
-    return dataset.map(
-        prepare_dataset,
-        remove_columns=dataset.column_names[&#34;train&#34;],
+    column_names = [dataset.column_names[key] for key in dataset.column_names.keys()]
+    # flatten
+    columns_to_remove = list(chain.from_iterable(column_names))
+
+    dataset = dataset.map(
+        _prepare_dataset,
+        remove_columns=columns_to_remove,
         num_proc=PROCESSOR_COUNT,
-    )</code></pre>
+    )
+
+    logger.debug(f&#34;Dataset post prep: {dataset}&#34;)
+    logger.debug(f&#34;Training labels: {dataset[&#39;train&#39;][&#39;labels&#39;]}&#34;)
+    return dataset</code></pre>
 </details>
 </dd>
 </dl>

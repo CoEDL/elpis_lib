@@ -31,13 +31,14 @@
 from dataclasses import dataclass, fields
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import torch
 from transformers import TrainingArguments
 
 BASE_MODEL = &#34;facebook/wav2vec2-base-960h&#34;
 SAMPLING_RATE = 16_000
+METRICS = (&#34;wer&#34;, &#34;cer&#34;)
 
 
 class TrainingStatus(Enum):
@@ -80,6 +81,7 @@ class TrainingJob:
     status: TrainingStatus = TrainingStatus.WAITING
     base_model: str = BASE_MODEL
     sampling_rate: int = SAMPLING_RATE
+    metrics: Tuple[str, ...] = METRICS
 
     def to_training_args(self, output_dir: Path, **kwargs) -&gt; TrainingArguments:
         return TrainingArguments(
@@ -114,6 +116,7 @@ class TrainingJob:
             status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
             base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
             sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
+            metrics=data.get(&#34;metrics&#34;, METRICS),
         )
 
     def to_dict(self) -&gt; Dict[str, Any]:
@@ -133,7 +136,7 @@ class TrainingJob:
 <dl>
 <dt id="elpis.trainer.job.TrainingJob"><code class="flex name class">
 <span>class <span class="ident">TrainingJob</span></span>
-<span>(</span><span>model_name: str, dataset_name: str, options: <a title="elpis.trainer.job.TrainingOptions" href="#elpis.trainer.job.TrainingOptions">TrainingOptions</a>, status: <a title="elpis.trainer.job.TrainingStatus" href="#elpis.trainer.job.TrainingStatus">TrainingStatus</a> = TrainingStatus.WAITING, base_model: str = 'facebook/wav2vec2-base-960h', sampling_rate: int = 16000)</span>
+<span>(</span><span>model_name: str, dataset_name: str, options: <a title="elpis.trainer.job.TrainingOptions" href="#elpis.trainer.job.TrainingOptions">TrainingOptions</a>, status: <a title="elpis.trainer.job.TrainingStatus" href="#elpis.trainer.job.TrainingStatus">TrainingStatus</a> = TrainingStatus.WAITING, base_model: str = 'facebook/wav2vec2-base-960h', sampling_rate: int = 16000, metrics: Tuple[str, ...] = ('wer', 'cer'))</span>
 </code></dt>
 <dd>
 <div class="desc"><p>A class representing a training job for a model</p></div>
@@ -151,6 +154,7 @@ class TrainingJob:
     status: TrainingStatus = TrainingStatus.WAITING
     base_model: str = BASE_MODEL
     sampling_rate: int = SAMPLING_RATE
+    metrics: Tuple[str, ...] = METRICS
 
     def to_training_args(self, output_dir: Path, **kwargs) -&gt; TrainingArguments:
         return TrainingArguments(
@@ -185,6 +189,7 @@ class TrainingJob:
             status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
             base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
             sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
+            metrics=data.get(&#34;metrics&#34;, METRICS),
         )
 
     def to_dict(self) -&gt; Dict[str, Any]:
@@ -199,6 +204,10 @@ class TrainingJob:
 <div class="desc"></div>
 </dd>
 <dt id="elpis.trainer.job.TrainingJob.dataset_name"><code class="name">var <span class="ident">dataset_name</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.trainer.job.TrainingJob.metrics"><code class="name">var <span class="ident">metrics</span> : Tuple[str, ...]</code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -239,6 +248,7 @@ def from_dict(data: Dict[str, Any]) -&gt; TrainingJob:
         status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
         base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
         sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
+        metrics=data.get(&#34;metrics&#34;, METRICS),
     )</code></pre>
 </details>
 </dd>
@@ -461,6 +471,7 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 <li><code><a title="elpis.trainer.job.TrainingJob.base_model" href="#elpis.trainer.job.TrainingJob.base_model">base_model</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.dataset_name" href="#elpis.trainer.job.TrainingJob.dataset_name">dataset_name</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.from_dict" href="#elpis.trainer.job.TrainingJob.from_dict">from_dict</a></code></li>
+<li><code><a title="elpis.trainer.job.TrainingJob.metrics" href="#elpis.trainer.job.TrainingJob.metrics">metrics</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.model_name" href="#elpis.trainer.job.TrainingJob.model_name">model_name</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.options" href="#elpis.trainer.job.TrainingJob.options">options</a></code></li>
 <li><code><a title="elpis.trainer.job.TrainingJob.sampling_rate" href="#elpis.trainer.job.TrainingJob.sampling_rate">sampling_rate</a></code></li>
