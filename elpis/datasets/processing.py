@@ -63,7 +63,7 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -> Datas
     """
 
     logger.debug(f"Dataset pre prep: {dataset}")
-    logger.debug(f"Dataset[train] pre prep: {dataset['train']['transcript']}")
+    logger.debug(f"Dataset[train] pre prep: {dataset['train']['transcript'][0]}")
     logger.debug(f"Tokenizer vocab: {processor.tokenizer.vocab}")  # type: ignore
 
     def _prepare_dataset(batch: Dict) -> Dict[str, List]:
@@ -90,5 +90,5 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -> Datas
     )
 
     logger.debug(f"Dataset post prep: {dataset}")
-    logger.debug(f"Training labels: {dataset['train']['labels']}")
+    logger.debug(f"Training labels: {dataset['train']['labels'][0]}")
     return dataset
