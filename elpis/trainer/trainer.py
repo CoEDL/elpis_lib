@@ -101,7 +101,7 @@ def train(
             job.base_model,
             cache_dir=cache_dir,
             ctc_loss_reduction="mean",
-            pad_token_id=processor.tokenizer.pad_token_id, # type: ignore
+            pad_token_id=processor.tokenizer.pad_token_id,  # type: ignore
         )
         logger.info("Downloaded model.")
 
@@ -116,7 +116,7 @@ def train(
             args=job.to_training_args(output_dir),
             train_dataset=dataset["train"],  # type: ignore
             eval_dataset=dataset["test"],  # type: ignore
-            tokenizer=processor.feature_extractor, #type: ignore
+            tokenizer=processor.feature_extractor,  # type: ignore
             data_collator=data_collator,
             compute_metrics=create_metrics(job.metrics, processor),
         )
