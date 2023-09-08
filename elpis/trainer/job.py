@@ -88,7 +88,7 @@ class TrainingJob:
             status=TrainingStatus(data.get("status", TrainingStatus.WAITING)),
             base_model=data.get("base_model", BASE_MODEL),
             sampling_rate=data.get("sampling_rate", SAMPLING_RATE),
-            metrics=data.get("metrics", METRICS)
+            metrics=data.get("metrics", METRICS),
         )
 
     def to_dict(self) -> Dict[str, Any]:

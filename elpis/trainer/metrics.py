@@ -34,8 +34,11 @@ def create_metrics(
 
         logger.debug(f"METRICS->pred: {pred_str} label:{label_str}")
 
-        result = {name: metric.compute(predictions=pred_str, references=label_str) for name, metric in metrics.items()} 
+        result = {
+            name: metric.compute(predictions=pred_str, references=label_str)
+            for name, metric in metrics.items()
+        }
         logger.debug(f"Metrics Result: {result}")
-        return result 
+        return result
 
     return compute_metrics
