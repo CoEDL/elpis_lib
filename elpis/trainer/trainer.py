@@ -41,8 +41,11 @@ def create_wav2vec2_processor(
     pad_token="[PAD]",
     delimiter_token="|",
 ) -> Wav2Vec2Processor:
-    # Build up a vocab from the training data.
-    vocab = Vocab.from_strings(dataset["train"]["transcript"])
+    # Build up a vocab from the dataset.
+    train_vocab = Vocab.from_strings(dataset["train"]["transcript"])
+    test_vocab = Vocab.from_strings(dataset["test"]["transcript"])
+    vocab = train_vocab.merge(test_vocab)
+
     vocab.add(unk_token)
     vocab.add(pad_token)
     vocab.replace(" ", delimiter_token)  # feels a little restrictive?
