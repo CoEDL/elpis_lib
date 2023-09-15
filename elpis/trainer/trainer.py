@@ -5,8 +5,11 @@ from typing import Optional
 from datasets import DatasetDict
 from loguru import logger
 from transformers import (
+    AutoConfig,
+    AutoFeatureExtractor,
     AutoModelForCTC,
     AutoProcessor,
+    AutoTokenizer,
     Trainer,
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
@@ -14,7 +17,7 @@ from transformers import (
 )
 
 from elpis.datasets import create_dataset, prepare_dataset
-from elpis.models.vocab import Vocab
+from elpis.models.vocab import VOCAB_FILE, Vocab
 from elpis.trainer.data_collator import DataCollatorCTCWithPadding
 from elpis.trainer.job import TrainingJob
 from elpis.trainer.metrics import create_metrics
@@ -26,21 +29,14 @@ def create_processor(
     output_dir: Path,
     dataset: DatasetDict,
     cache_dir: Optional[Path],
-) -> Wav2Vec2Processor:
-    if "wav2vec2" in job.base_model:
-        return create_wav2vec2_processor(output_dir, dataset, cache_dir)
-
-    return AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
-
-
-def create_wav2vec2_processor(
-    output_dir: Path,
-    dataset: DatasetDict,
-    cache_dir: Optional[Path],
     unk_token="[UNK]",
     pad_token="[PAD]",
-    delimiter_token="|",
+    word_delimiter_token="|",
 ) -> Wav2Vec2Processor:
+    config = AutoConfig.from_pretrained(job.base_model)
+    tokenizer_type = config.model_type if config.tokenizer_class is None else None
+    config = config if config.tokenizer_class is not None else None
+
     # Build up a vocab from the dataset.
     train_vocab = Vocab.from_strings(dataset["train"]["transcript"])
     test_vocab = Vocab.from_strings(dataset["test"]["transcript"])
@@ -48,24 +44,22 @@ def create_wav2vec2_processor(
 
     vocab.add(unk_token)
     vocab.add(pad_token)
-    vocab.replace(" ", delimiter_token)  # feels a little restrictive?
+    vocab.replace(" ", word_delimiter_token)  # feels a little restrictive?
+    logger.info(f"Vocab: {vocab.vocab}")
     vocab.save(output_dir)
 
-    # Create tokenizer
-    tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(
         output_dir,
+        config=config,
+        tokenizer_type=tokenizer_type,
         unk_token=unk_token,
         pad_token=pad_token,
-        word_delimiter_token=delimiter_token,
+        word_delimiter_token=word_delimiter_token,
         cache_dir=cache_dir,
     )
 
-    feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1,
-        sampling_rate=16000,
-        padding_value=0.0,
-        do_normalize=True,
-        return_attention_mask=True,
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        job.base_model, cache_dir=cache_dir
     )
 
     return Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
@@ -105,6 +99,15 @@ def train(
             cache_dir=cache_dir,
             ctc_loss_reduction="mean",
             pad_token_id=processor.tokenizer.pad_token_id,  # type: ignore
+            # Wav2vec2 specific hyperparams copied from docs.
+            attention_dropout=0.1,
+            hidden_dropout=0.1,
+            feat_proj_dropout=0.0,
+            mask_time_prob=0.05,
+            layerdrop=0.1,
+            vocab_size=len(processor.tokenizer),  # type: ignore
+            # For Ash -> errors if below param not set.
+            ignore_mismatched_sizes=True,
         )
         logger.info("Downloaded model.")
 
