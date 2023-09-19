@@ -29,8 +29,8 @@ class TrainingOptions:
     learning_rate: float = 1e-4
     min_duration: int = 0
     max_duration: int = 60
-    #word_delimiter_token: str = " " # Note: This might interfere with the tokenizer?
-    test_size: float = 0.2 # TODO: link with dataset?
+    # word_delimiter_token: str = " " # Note: This might interfere with the tokenizer?
+    test_size: float = 0.2  # TODO: link with dataset?
     freeze_feature_extractor: bool = True
 
     @staticmethod
