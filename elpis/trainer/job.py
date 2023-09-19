@@ -29,9 +29,9 @@ class TrainingOptions:
     learning_rate: float = 1e-4
     min_duration: int = 0
     max_duration: int = 60
-    word_delimiter_token: str = " "
-    test_size: float = 0.2
-    freeze_feature_extractor: bool = False
+    # word_delimiter_token: str = " " # Note: This might interfere with the tokenizer?
+    test_size: float = 0.2  # TODO: link with dataset?
+    freeze_feature_extractor: bool = True
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "TrainingOptions":
@@ -68,10 +68,10 @@ class TrainingJob:
             gradient_checkpointing=True,
             learning_rate=self.options.learning_rate,
             weight_decay=0.005,
-            save_steps=500,
-            eval_steps=500,
-            logging_steps=500,
-            warmup_steps=1000,
+            save_steps=400,
+            eval_steps=400,
+            logging_steps=400,
+            warmup_steps=500,
             save_total_limit=2,
             overwrite_output_dir=True,
             do_train=True,

@@ -3,6 +3,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 from datasets import Audio, DatasetDict, load_dataset
 from loguru import logger
 from transformers import Wav2Vec2Processor
@@ -63,7 +64,11 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -> Datas
     """
 
     logger.debug(f"Dataset pre prep: {dataset}")
-    logger.debug(f"Dataset[train] pre prep: {dataset['train']['transcript']}")
+    logger.debug(f"Dataset[train] pre prep: {dataset['train']['transcript'][0]}")
+    logger.debug(
+        f'Input array shape:, {np.asarray(dataset["train"][0]["audio"]["array"]).shape}'
+    )
+    logger.debug(f'Sampling rate:, {dataset["train"][0]["audio"]["sampling_rate"]}')
     logger.debug(f"Tokenizer vocab: {processor.tokenizer.vocab}")  # type: ignore
 
     def _prepare_dataset(batch: Dict) -> Dict[str, List]:
@@ -79,9 +84,9 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -> Datas
 
         return batch
 
-    column_names = [dataset.column_names[key] for key in dataset.column_names.keys()]
-    # flatten
-    columns_to_remove = list(chain.from_iterable(column_names))
+    columns = dataset.column_names.values()
+    # flatten and make unique between datasets
+    columns_to_remove = list(set(chain.from_iterable(columns)))
 
     dataset = dataset.map(
         _prepare_dataset,
@@ -90,5 +95,6 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -> Datas
     )
 
     logger.debug(f"Dataset post prep: {dataset}")
-    logger.debug(f"Training labels: {dataset['train']['labels']}")
+    logger.debug(f"Training labels: {dataset['train']['labels'][0]}")
+    # logger.debug(f"Training inputs: {dataset['train']['input_values'][0]}")
     return dataset
