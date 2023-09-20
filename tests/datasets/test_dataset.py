@@ -130,7 +130,7 @@ def test_duplicate_files():
 
 
 def test_valid_transcriptions():
-    dataset = Dataset.from_dict(DATASET_DICT)
+    dataset = Dataset.from_dict(MESSY_DATASET_DICT)
     assert len(dataset.valid_transcriptions) == 1
 
 
