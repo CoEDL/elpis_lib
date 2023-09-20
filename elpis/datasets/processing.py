@@ -27,12 +27,13 @@ def create_dataset(
     Returns:
         A dataset dictionary with test and train splits.
     """
-
     transcript_files = [
         str(dataset_path / file)
         for file in os.listdir(dataset_path)
         if (dataset_path / file).suffix == ".json"
     ]
+    logger.debug(f"Transcript file paths sample: {transcript_files[:4]}")
+
     # Annoying hack
     if cache_dir is not None:
         cache_dir = str(cache_dir)  # type: ignore
@@ -41,12 +42,16 @@ def create_dataset(
 
     # Convert the audio file name column into the matching audio data
     dataset = dataset.rename_column("audio_file", AUDIO_COLUMN)
+    logger.debug(f"Dataset audio file paths sample: {dataset['train'][AUDIO_COLUMN][:4]}")  # type: ignore
 
     def resolve_audio_path(row: Dict[str, Any]) -> Dict[str, Any]:
-        row[AUDIO_COLUMN] = str(dataset_path / row[AUDIO_COLUMN])
+        # Forcefully resolve to same dir as dataset.
+        path = dataset_path / Path(row[AUDIO_COLUMN]).name
+        row[AUDIO_COLUMN] = str(path)
         return row
 
     dataset = dataset.map(resolve_audio_path)
+    logger.debug(f"Dataset audio file paths post-resolution: {dataset['train'][AUDIO_COLUMN][:4]}")  # type: ignore
     dataset = dataset.cast_column(AUDIO_COLUMN, Audio(sampling_rate=SAMPLING_RATE))
 
     return dataset["train"].train_test_split(test_size=test_size)  # type: ignore
