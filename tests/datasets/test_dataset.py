@@ -47,11 +47,16 @@ FILES_WITH_ELAN = ["1.eaf", "1.wav"]
 FILES_WITHOUT_ELAN = ["1.txt", "1.wav"]
 MISMATCHED_FILES = ["1.eaf", "1.wav", "2.wav", "3.txt"]
 COLLIDING_FILES = ["1.eaf", "1.wav", "1.txt"]
-
+MESSY_FILES = ["1.eaf", "1.wav", "2.eaf", "2.txt", "2.wav", "3.eaf", "4.wav"]
 
 DATASET_DICT = {
     "name": "dataset",
     "files": FILES_WITH_ELAN,
+    "cleaning_options": CLEANING_OPTIONS_DICT,
+}
+MESSY_DATASET_DICT = {
+    "name": "dataset",
+    "files": MESSY_FILES,
     "cleaning_options": CLEANING_OPTIONS_DICT,
 }
 
@@ -122,6 +127,11 @@ def test_duplicate_files():
 
     dataset.files = to_paths(COLLIDING_FILES)
     assert set(dataset.colliding_files()) == {Path("1.eaf"), Path("1.txt")}
+
+
+def test_valid_transcriptions():
+    dataset = Dataset.from_dict(MESSY_DATASET_DICT)
+    assert len(dataset.valid_transcriptions) == 1
 
 
 def test_dataset_batching():
