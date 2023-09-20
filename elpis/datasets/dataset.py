@@ -153,6 +153,14 @@ class Dataset:
             elan_options=elan_options,
         )
 
+    @property
+    def valid_transcriptions(self):
+        return (
+            self._transcript_files()
+            .difference(self.mismatched_files())
+            .difference(self.colliding_files())
+        )
+
     def to_batches(self) -> List[ProcessingBatch]:
         """Converts a valid dataset to a list of processing jobs, matching
         transcript and audio files.
@@ -164,7 +172,7 @@ class Dataset:
                 cleaning_options=self.cleaning_options,
                 elan_options=self.elan_options,
             )
-            for transcription_file in self._transcript_files()
+            for transcription_file in self.valid_transcriptions
         ]
 
     def to_dict(self) -> Dict[str, Any]:
