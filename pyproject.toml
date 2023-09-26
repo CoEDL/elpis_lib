@@ -12,7 +12,7 @@ keywords = ["Elpis", "huggingface", "ASR", "Automatic Speech Recognition", "CoED
 [tool.poetry.dependencies]
 python = "^3.10"
 torch = "^2.0.1"
-transformers = "^4.23.1"
+transformers = "^4.33.2"
 datasets = "^2.6.1"
 loguru = "^0.6.0"
 pympi-ling = "^1.70.2"
