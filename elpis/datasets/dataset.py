@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
+from functools import cached_property, reduce
+from itertools import chain, groupby
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from elpis.models import ElanOptions
 
@@ -82,15 +84,29 @@ class Dataset:
         return (
             not self.is_empty()
             and len(self.files) % 2 == 0
-            and len(self.mismatched_files()) == 0
-            and len(self.colliding_files()) == 0
+            and len(self.mismatched_files) == 0
+            and len(self.colliding_files) == 0
         )
+
+    @staticmethod
+    def is_audio(file: Path) -> bool:
+        return file.suffix == ".wav"
+
+    @staticmethod
+    def is_transcript(file: Path) -> bool:
+        return file.suffix in TRANSCRIPTION_EXTENSIONS
 
     @staticmethod
     def corresponding_audio_name(transcript_file: Path) -> Path:
         """Gets the corresponding audio file name for a given transcript file."""
         return Path(transcript_file).parent / (transcript_file.stem + ".wav")
 
+    @property
+    def transcript_files(self) -> Iterable[Path]:
+        """Returns a set of all transcription files within the dataset."""
+        return filter(Dataset.is_transcript, self.files)
+
+    @cached_property
     def mismatched_files(self) -> Set[Path]:
         """Returns the list of transcript files with no corresponding
         audio and vice versa.
@@ -101,18 +117,19 @@ class Dataset:
         Returns:
             A list of the mismatched file names.
         """
-        transcripts_with_audio = set(
-            filter(
-                lambda file: Dataset.corresponding_audio_name(file) in self.files,
-                self._transcript_files(),
-            )
-        )
-        matched_files = transcripts_with_audio | set(
-            Dataset.corresponding_audio_name(file) for file in transcripts_with_audio
-        )
+        grouped_by_stems = groupby(self.files, lambda path: path.stem)
 
-        return set(self.files).difference(matched_files)
+        def mismatches(files: Iterable[Path]) -> list[Path]:
+            files = list(files)
+            has_audio = any(Dataset.is_audio(file) for file in files)
+            has_transcript = any(Dataset.is_transcript(file) for file in files)
+            return [] if has_transcript == has_audio else files
 
+        groups = (mismatches(g) for _, g in grouped_by_stems)
+        result = set(chain.from_iterable(groups))
+        return result
+
+    @cached_property
     def colliding_files(self) -> Set[Path]:
         """Returns the list of transcript file names that collide.
 
@@ -122,19 +139,14 @@ class Dataset:
         Returns:
             A list of the colliding file names.
         """
+        grouped_by_stems = groupby(self.transcript_files, lambda path: path.stem)
 
-        def would_collide(transcript_file: Path) -> bool:
-            other_files = self._transcript_files().difference({transcript_file})
-            other_file_names = map(lambda file: Path(file).stem, other_files)
-            return Path(transcript_file).stem in other_file_names
+        def collisions(files: Iterable[Path]) -> list[Path]:
+            files = list(files)
+            return files if len(files) >= 2 else []
 
-        return set(filter(would_collide, self._transcript_files()))
-
-    def _transcript_files(self) -> Set[Path]:
-        """Returns a set of all transcription files within the dataset."""
-        return set(
-            filter(lambda file: file.suffix in TRANSCRIPTION_EXTENSIONS, self.files)
-        )
+        collision_groups = (collisions(g) for _, g in grouped_by_stems)
+        return set(chain.from_iterable(collision_groups))
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> Dataset:
@@ -155,17 +167,16 @@ class Dataset:
 
     @property
     def valid_transcriptions(self):
-        return (
-            self._transcript_files()
-            .difference(self.mismatched_files())
-            .difference(self.colliding_files())
+        is_valid = lambda path: path not in (
+            self.mismatched_files | self.colliding_files
         )
+        return filter(is_valid, self.transcript_files)
 
-    def to_batches(self) -> List[ProcessingBatch]:
+    def to_batches(self) -> Iterable[ProcessingBatch]:
         """Converts a valid dataset to a list of processing jobs, matching
         transcript and audio files.
         """
-        return [
+        return (
             ProcessingBatch(
                 transcription_file=transcription_file,
                 audio_file=self.corresponding_audio_name(transcription_file),
@@ -173,7 +184,7 @@ class Dataset:
                 elan_options=self.elan_options,
             )
             for transcription_file in self.valid_transcriptions
-        ]
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         result = {

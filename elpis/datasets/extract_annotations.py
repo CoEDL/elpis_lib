@@ -81,10 +81,6 @@ def extract_elan_annotations(
         A list of the annotations contained for the supplied data. Returns an
         empty list if the given selection isn't found.
     """
-    logger.info(
-        f"processing eaf {elan_file_path} using {selection_type}: {selection_data}"
-    )
-
     match selection_type:
         case ElanTierSelector.NAME:
             return get_annotations_by_tier_name(elan_file_path, selection_data)

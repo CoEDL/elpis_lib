@@ -5,8 +5,6 @@ from itertools import chain
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-from loguru import logger
-
 import elpis.utils.audio as audio
 from elpis.datasets.clean_text import clean_text
 from elpis.datasets.dataset import CleaningOptions, ProcessingBatch
