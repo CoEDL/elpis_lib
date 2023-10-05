@@ -71,6 +71,9 @@ class Dataset:
     cleaning_options: CleaningOptions
     elan_options: Optional[ElanOptions]
 
+    def __post_init__(self):
+        self.files = sorted(self.files)
+
     def is_empty(self) -> bool:
         """Returns true iff the dataset contains no files."""
         return len(self.files) == 0
@@ -103,7 +106,7 @@ class Dataset:
 
     @property
     def transcript_files(self) -> Iterable[Path]:
-        """Returns a set of all transcription files within the dataset."""
+        """Returns an iterable of all transcription files within the dataset."""
         return filter(Dataset.is_transcript, self.files)
 
     @cached_property

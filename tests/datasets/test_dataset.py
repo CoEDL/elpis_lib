@@ -54,10 +54,16 @@ class Files(Enum):
     MISMATCHED = ["1.eaf", "1.wav", "2.wav", "3.txt"]
     COLLIDING = ["1.eaf", "1.wav", "1.txt"]
     MESSY = ["1.eaf", "1.wav", "2.eaf", "2.txt", "2.wav", "3.eaf", "4.wav"]
+    LARGE = ["1.eaf", "1.wav", "2.eaf", "2.wav", "3.eaf", "3.wav"]
 
 
-def create_dataset(files: Files, elan_options: Optional[ElanOptions] = None) -> Dataset:
+def create_dataset(
+    files: Files, elan_options: Optional[ElanOptions] = None, absolute_paths=False
+) -> Dataset:
     paths = [Path(x) for x in files.value]
+    if absolute_paths:
+        paths = [x.absolute() for x in paths]
+
     print(f"Creating Dataset for: {files}: with {paths}")
     return Dataset(
         name="dataset",
@@ -102,6 +108,16 @@ def messy_dataset(elan_options):
     return create_dataset(Files.MESSY, elan_options=elan_options)
 
 
+@pytest.fixture
+def large_dataset(elan_options):
+    return create_dataset(Files.LARGE, elan_options=elan_options)
+
+
+@pytest.fixture
+def abs_messy_dataset(elan_options):
+    return create_dataset(Files.MESSY, elan_options=elan_options, absolute_paths=True)
+
+
 DATASET_DICT = {
     "name": "dataset",
     "files": Files.ELAN.value,
@@ -118,6 +134,7 @@ DATASET_DICT_ELAN = DATASET_DICT | {"elan_options": ELAN_OPTIONS_DICT}
 
 def to_paths(names: List[str]) -> List[Path]:
     return [Path(name) for name in names]
+
 
 def test_build_dataset():
     dataset = Dataset.from_dict(DATASET_DICT)
@@ -158,21 +175,37 @@ def test_dataset_has_elan(elan_dataset: Dataset, text_dataset: Dataset):
     assert not text_dataset.has_elan()
 
 
-def test_dataset_mismatched_files(dataset: Dataset, mismatched_dataset: Dataset):
+def test_dataset_mismatched_files(
+    dataset: Dataset, mismatched_dataset: Dataset, abs_messy_dataset: Dataset
+):
     assert len(dataset.mismatched_files) == 0
     assert mismatched_dataset.mismatched_files == {Path("2.wav"), Path("3.txt")}
+    assert abs_messy_dataset.mismatched_files == {
+        Path("4.wav").absolute(),
+        Path("3.eaf").absolute(),
+    }
 
 
-def test_duplicate_files(dataset: Dataset, colliding_dataset: Dataset):
+def test_duplicate_files(
+    dataset: Dataset, colliding_dataset: Dataset, abs_messy_dataset: Dataset
+):
     assert len(dataset.colliding_files) == 0
     assert colliding_dataset.colliding_files == {Path("1.eaf"), Path("1.txt")}
+    assert abs_messy_dataset.colliding_files == {
+        Path("2.eaf").absolute(),
+        Path("2.txt").absolute(),
+    }
 
 
-def test_valid_transcriptions(messy_dataset: Dataset):
+def test_valid_transcriptions(
+    dataset: Dataset, messy_dataset: Dataset, abs_messy_dataset: Dataset
+):
+    assert len(list(dataset.valid_transcriptions)) == 1
     assert len(list(messy_dataset.valid_transcriptions)) == 1
+    assert len(list(abs_messy_dataset.valid_transcriptions)) == 1
 
 
-def test_dataset_batching(dataset: Dataset):
+def test_basic_dataset_batching(dataset: Dataset):
     batches = list(dataset.to_batches())
     assert len(batches) == 1
     job = batches[0]
@@ -181,6 +214,22 @@ def test_dataset_batching(dataset: Dataset):
     assert job.audio_file == audio_file
     assert job.cleaning_options == dataset.cleaning_options
     assert job.elan_options == dataset.elan_options
+
+
+def test_messy_batching(messy_dataset: Dataset):
+    batches = list(messy_dataset.to_batches())
+    assert len(batches) == 1
+    job = batches[0]
+    transcript_file, audio_file = to_paths(Files.MESSY.value[:2])
+    assert job.transcription_file == transcript_file
+    assert job.audio_file == audio_file
+    assert job.cleaning_options == messy_dataset.cleaning_options
+    assert job.elan_options == messy_dataset.elan_options
+
+
+def test_multiple_batches(large_dataset: Dataset):
+    batches = list(large_dataset.to_batches())
+    assert len(batches) == len(Files.LARGE.value) / 2
 
 
 # ====== Processing Job ======
