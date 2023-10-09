@@ -33,7 +33,7 @@ def create_processor(
     pad_token="[PAD]",
     word_delimiter_token="|",
 ) -> Wav2Vec2Processor:
-    config = AutoConfig.from_pretrained(job.base_model)
+    config = AutoConfig.from_pretrained(job.base_model, cache_dir=cache_dir)
     tokenizer_type = config.model_type if config.tokenizer_class is None else None
     config = config if config.tokenizer_class is not None else None
 
@@ -44,7 +44,7 @@ def create_processor(
 
     vocab.add(unk_token)
     vocab.add(pad_token)
-    vocab.replace(" ", word_delimiter_token)  # feels a little restrictive?
+    vocab.replace(" ", word_delimiter_token)
     logger.info(f"Vocab: {vocab.vocab}")
     vocab.save(output_dir)
 
@@ -57,11 +57,11 @@ def create_processor(
         word_delimiter_token=word_delimiter_token,
         cache_dir=cache_dir,
     )
-
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         job.base_model, cache_dir=cache_dir
     )
 
+    AutoProcessor.from_pretrained
     return Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
 
@@ -99,20 +99,16 @@ def train(
             cache_dir=cache_dir,
             ctc_loss_reduction="mean",
             pad_token_id=processor.tokenizer.pad_token_id,  # type: ignore
-            # Wav2vec2 specific hyperparams copied from docs.
-            attention_dropout=0.1,
-            hidden_dropout=0.1,
-            feat_proj_dropout=0.0,
-            mask_time_prob=0.05,
-            layerdrop=0.1,
-            vocab_size=len(processor.tokenizer),  # type: ignore
-            # For Ash -> errors if below param not set.
+            bos_token_id=processor.tokenizer.bos_token_id,  # type: ignore
+            eos_token_id=processor.tokenizer.eos_token_id,  # type: ignore
+            vocab_size=len(processor.tokenizer.get_vocab()),  # type: ignore
             ignore_mismatched_sizes=True,
+            **job.model_options
         )
         logger.info("Downloaded model.")
 
         if job.options.freeze_feature_extractor:
-            model.freeze_feature_extractor()
+            model.freeze_feature_encoder()
 
         data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
         output_dir.mkdir(exist_ok=True, parents=True)
@@ -126,6 +122,8 @@ def train(
             data_collator=data_collator,
             compute_metrics=create_metrics(job.metrics, processor),
         )
+
+        trainer.create_optimizer()
 
         logger.info(f"Begin training model...")
         trainer.train()
