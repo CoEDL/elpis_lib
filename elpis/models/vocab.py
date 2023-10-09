@@ -42,7 +42,7 @@ class Vocab:
 
     def replace(self, original: str, replacement: str) -> None:
         """Replaces the supplied character mapping in the vocab."""
-        if original not in self.vocab:
+        if original not in self.vocab or original == replacement:
             return
 
         self.vocab[replacement] = self.vocab[original]
