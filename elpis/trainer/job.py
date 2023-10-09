@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -49,7 +49,8 @@ class TrainingJob:
 
     model_name: str
     dataset_name: str
-    options: TrainingOptions
+    options: TrainingOptions  # TODO - rename to training_options next major V
+    model_options: Dict[str, Any] = field(default_factory=dict)
     status: TrainingStatus = TrainingStatus.WAITING
     base_model: str = BASE_MODEL
     sampling_rate: int = SAMPLING_RATE
@@ -68,10 +69,10 @@ class TrainingJob:
             gradient_checkpointing=True,
             learning_rate=self.options.learning_rate,
             weight_decay=0.005,
-            save_steps=400,
-            eval_steps=400,
-            logging_steps=400,
-            warmup_steps=500,
+            save_steps=10,
+            eval_steps=10,
+            logging_steps=10,
+            warmup_steps=10,
             save_total_limit=2,
             overwrite_output_dir=True,
             do_train=True,
@@ -85,6 +86,7 @@ class TrainingJob:
             model_name=data["model_name"],
             dataset_name=data["dataset_name"],
             options=TrainingOptions.from_dict(data["options"]),
+            model_options=data.get("model_options", {}),
             status=TrainingStatus(data.get("status", TrainingStatus.WAITING)),
             base_model=data.get("base_model", BASE_MODEL),
             sampling_rate=data.get("sampling_rate", SAMPLING_RATE),
