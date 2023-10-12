@@ -128,4 +128,6 @@ def prepare_dataset(
             input_columns=["input_length"],
         )
 
+    logger.info(f"Test encoding labels: {dataset['train'][0]['labels']}")
+
     return dataset

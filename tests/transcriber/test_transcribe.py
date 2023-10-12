@@ -3,11 +3,11 @@ from pathlib import Path
 from loguru import logger
 from pytest import mark
 
-from elpis.trainer.job import BASE_MODEL
 from elpis.transcriber.transcribe import build_pipeline, transcribe
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 AUDIO = DATA_DIR / "oily_rag.wav"
+BASE_MODEL = "facebook/wav2vec2-base"
 
 
 @mark.integration

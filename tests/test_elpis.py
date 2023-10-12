@@ -3,14 +3,15 @@ from pathlib import Path
 
 from loguru import logger
 from pytest import mark
+from transformers import TrainingArguments
 
 from elpis import __version__
 from elpis.datasets import Dataset
 from elpis.datasets.dataset import CleaningOptions
 from elpis.datasets.preprocessing import process_batch
 from elpis.models.elan_options import ElanOptions, ElanTierSelector
-from elpis.trainer.job import TrainingJob, TrainingOptions
-from elpis.trainer.trainer import train
+from elpis.models.job import DataArguments, Job, ModelArguments
+from elpis.trainer.trainer import run_job, train
 from elpis.transcriber.results import build_elan, build_text
 from elpis.transcriber.transcribe import build_pipeline, transcribe
 
@@ -49,16 +50,21 @@ def test_everything(tmp_path: Path):
         process_batch(batch, dataset_dir)
 
     # Train the model
-    job = TrainingJob(
-        model_name="model",
-        dataset_name="dataset",
-        options=TrainingOptions(epochs=2, learning_rate=0.001),
+    job = Job(
+        model_args=ModelArguments(model_name_or_path="facebook/wav2vec2-base"),
+        data_args=DataArguments(
+            dataset_name_or_path=str(dataset_dir), text_column_name="transcript"
+        ),
+        training_args=TrainingArguments(
+            output_dir=str(model_dir),
+            num_train_epochs=2,
+            learning_rate=1e-4,
+            do_train=True,
+            do_eval=True,
+        ),
     )
-    train(
-        job=job,
-        output_dir=model_dir,
-        dataset_dir=dataset_dir,
-    )
+
+    run_job(job=job)
 
     # Perform inference with pipeline
     asr = build_pipeline(

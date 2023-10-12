@@ -50,6 +50,7 @@ def run_job(
         dataset = create_dataset(job)
 
         tokenizer = create_tokenizer(job, config, dataset)
+        logger.info(f"Tokenizer Vocab: {tokenizer.get_vocab()}")  # type: ignore
         feature_extractor = AutoFeatureExtractor.from_pretrained(
             job.model_args.model_name_or_path,
             cache_dir=cache_dir,
@@ -197,6 +198,8 @@ def update_config(job: Job, config: AutoConfig, tokenizer: AutoTokenizer) -> Non
             "ctc_loss_reduction": job.model_args.ctc_loss_reduction,
             "ctc_zero_infinity": job.model_args.ctc_zero_infinity,
             "pad_token_id": tokenizer.pad_token_id,  # type: ignore
+            "bos_token_id": tokenizer.bos_token_id,  # type: ignore
+            "eos_token_id": tokenizer.eos_token_id,  # type: ignore
             "vocab_size": len(tokenizer),  # type: ignore
             "activation_dropout": job.model_args.activation_dropout,
         }
@@ -272,6 +275,7 @@ def train(job: Job, trainer: Trainer, dataset: DatasetDict):
 
     trainer.log_metrics("train", metrics)
     trainer.save_metrics("train", metrics)
+    trainer.save_model()
     trainer.save_state()
 
 
