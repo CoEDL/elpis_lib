@@ -17,7 +17,7 @@ JOB = TrainingJob(
 
 
 @mark.integration
-def test_training(tmp_path: Path):
+def test_training_succeeds(tmp_path: Path):
     dataset_dir = tmp_path / "dataset"
     dataset_dir.mkdir(exist_ok=True, parents=True)
 
