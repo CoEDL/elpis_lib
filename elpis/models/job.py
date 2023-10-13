@@ -270,6 +270,10 @@ class DataArguments:
             )
         },
     )
+    do_lower_case: Optional[bool] = field(
+        default=None,
+        metadata={"help": "Whether the target text should be lower cased."},
+    )
 
 
 @dataclass

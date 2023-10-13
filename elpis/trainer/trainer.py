@@ -41,6 +41,7 @@ def run_job(
 
     logging_context = log_to_file(log_file) if log_file is not None else nullcontext()
     with logging_context:
+        # Setup required directories.
         output_dir = job.training_args.output_dir
         cache_dir = job.model_args.cache_dir
         Path(output_dir).mkdir(exist_ok=True, parents=True)
@@ -50,7 +51,7 @@ def run_job(
         dataset = create_dataset(job)
 
         tokenizer = create_tokenizer(job, config, dataset)
-        logger.info(f"Tokenizer Vocab: {tokenizer.get_vocab()}")  # type: ignore
+        logger.info(f"Tokenizer: {tokenizer}")  # type: ignore
         feature_extractor = AutoFeatureExtractor.from_pretrained(
             job.model_args.model_name_or_path,
             cache_dir=cache_dir,
@@ -172,6 +173,7 @@ def create_tokenizer(
         "unk_token": job.data_args.unk_token,
         "pad_token": job.data_args.pad_token,
         "word_delimiter_token": job.data_args.word_delimiter_token,
+        "do_lower_case": job.data_args.do_lower_case,
     }
 
     return AutoTokenizer.from_pretrained(
