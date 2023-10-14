@@ -17,7 +17,7 @@ def clean_text(
     Returns:
         The cleaned text
     """
-    words = text.lower().split()
+    words = text.upper().split()
 
     if words_to_remove is not None:
         words = filter(lambda word: word not in words_to_remove, words)
