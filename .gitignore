@@ -1,6 +1,5 @@
 *.pyc
 testdir
-testscript.py
 
 # Packages
 *.egg

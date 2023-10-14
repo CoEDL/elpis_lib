@@ -1,4 +1,3 @@
-from elpis.trainer.job import TrainingJob, TrainingOptions, TrainingStatus
-from elpis.trainer.trainer import train
+from elpis.trainer.trainer import run_job
 
-__all__ = ["TrainingJob", "TrainingOptions", "TrainingStatus", "train"]
+__all__ = ["run_job"]
