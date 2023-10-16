@@ -13,6 +13,7 @@ from transformers import (
     AutoTokenizer,
     Trainer,
     Wav2Vec2Processor,
+    set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
@@ -45,6 +46,8 @@ def run_job(
         output_dir = job.training_args.output_dir
         cache_dir = job.model_args.cache_dir
         Path(output_dir).mkdir(exist_ok=True, parents=True)
+
+        set_seed(job.training_args.seed)
 
         logger.info("Preparing Datasets...")
         config = create_config(job)
@@ -256,6 +259,7 @@ def last_checkpoint(job: Job) -> Optional[str]:
 
 def train(job: Job, trainer: Trainer, dataset: DatasetDict):
     if not job.training_args.do_train:
+        logger.info("Skipping training: `job.training_args.do_train` is false.")
         return
 
     checkpoint = last_checkpoint(job)
@@ -283,6 +287,7 @@ def train(job: Job, trainer: Trainer, dataset: DatasetDict):
 
 def evaluate(job: Job, trainer: Trainer, dataset: DatasetDict):
     if not job.training_args.do_eval:
+        logger.info("Skipping eval: `job.training_args.do_eval` is false.")
         return
 
     logger.info("*** Evaluate ***")
