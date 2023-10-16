@@ -1,11 +1,9 @@
 import shutil
-from itertools import groupby, takewhile
 from pathlib import Path
-from pprint import pprint
 
 from loguru import logger
 from tqdm import tqdm
-from transformers import TrainingArguments, training_args
+from transformers import TrainingArguments
 
 from elpis.datasets import Dataset
 from elpis.datasets.dataset import CleaningOptions
