@@ -186,11 +186,33 @@ class DataArguments:
             )
         },
     )
-    chars_to_ignore: Optional[List[str]] = list_field(
-        default=None,
-        metadata={"help": "A list of characters to remove from the transcripts."},
+    do_clean: bool = field(
+        default=True,
+        metadata={"help": "True if the dataset should be cleaned before use."},
     )
-    eval_metrics: List[str] = list_field(
+    words_to_remove: Optional[List[str]] = list_field(
+        default=[],
+        metadata={
+            "help": "A list of words to remove from the transcripts during dataset cleaning."
+        },
+    )
+    chars_to_remove: Optional[List[str]] = list_field(
+        default=[],
+        metadata={
+            "help": "A list of characters to remove from the transcripts during dataset cleaning."
+        },
+    )
+    chars_to_explode: Optional[List[str]] = list_field(
+        default=[],
+        metadata={
+            "help": "A list of characters to replace with spaces in the transcripts during dataset cleaning."
+        },
+    )
+    do_lower_case: Optional[bool] = field(
+        default=None,
+        metadata={"help": "Whether the target text should be lower cased."},
+    )
+    eval_metrics: List[str] = list_field(  # type: ignore
         default=DEFAULT_METRICS,
         metadata={
             "help": "A list of metrics the model should be evaluated on. E.g. `('wer', 'cer')`"
@@ -269,10 +291,6 @@ class DataArguments:
                 " input audio to a sequence of phoneme sequences."
             )
         },
-    )
-    do_lower_case: Optional[bool] = field(
-        default=None,
-        metadata={"help": "Whether the target text should be lower cased."},
     )
 
 
