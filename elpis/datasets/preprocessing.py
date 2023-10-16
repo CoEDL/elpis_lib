@@ -63,8 +63,8 @@ def clean_annotation(
     transcript = clean_text(
         text=annotation.transcript,
         words_to_remove=cleaning_options.words_to_remove,
-        punctuation_to_explode=cleaning_options.punctuation_to_explode,
-        punctuation_to_remove=cleaning_options.punctuation_to_remove,
+        characters_to_explode=cleaning_options.punctuation_to_explode,
+        characters_to_remove=cleaning_options.punctuation_to_remove,
     )
     result = copy(annotation)
     result.transcript = transcript
