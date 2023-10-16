@@ -20,7 +20,7 @@ evaluate = "^0.4.0"
 accelerate = "^0.22.0"
 jiwer = "^3.0.3"
 sounddevice = "^0.4.6"
-torch = "^2.1.0"
+torch = ">=2.0.0, !=2.0.1, !=2.1.0"
 pedalboard = "^0.8.3"
 
 [tool.poetry.dev-dependencies]
