@@ -5,13 +5,13 @@ from pathlib import Path
 from loguru import logger
 from transformers import TrainingArguments
 
-from elpis.datasets.processing import create_dataset
+from elpis.datasets.processing import create_local_dataset
 from elpis.models.job import DataArguments, Job, ModelArguments
 
 DATA_PATH = Path(__file__).parent.parent / "data" / "processing"
 
 
-def test_create_dataset(tmp_path: Path):
+def test_create_local_dataset(tmp_path: Path):
     cache_dir = tmp_path / "cache"
     dataset_dir = tmp_path / "dataset"
     model_dir = tmp_path / "model"
@@ -39,6 +39,6 @@ def test_create_dataset(tmp_path: Path):
         ),
     )
 
-    dataset = create_dataset(job)
+    dataset = create_local_dataset(job)
     assert "train" in dataset
     assert "eval" in dataset
