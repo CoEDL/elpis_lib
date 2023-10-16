@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from transformers import HfArgumentParser, TrainingArguments
 
@@ -289,12 +289,12 @@ class Job:
         return HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))  # type: ignore
 
     @classmethod
-    def from_args(cls) -> Job:
+    def from_args(cls, args=None) -> Job:
         (
             model_args,
             data_args,
             training_args,
-        ) = Job.parser().parse_args_into_dataclasses()
+        ) = Job.parser().parse_args_into_dataclasses(args)
         return cls(
             model_args=model_args, data_args=data_args, training_args=training_args
         )
@@ -306,6 +306,17 @@ class Job:
             data_args,
             training_args,
         ) = Job.parser().parse_json_file(str(file))
+        return cls(
+            model_args=model_args, data_args=data_args, training_args=training_args
+        )
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> Job:
+        (
+            model_args,
+            data_args,
+            training_args,
+        ) = Job.parser().parse_dict(data)
         return cls(
             model_args=model_args, data_args=data_args, training_args=training_args
         )
