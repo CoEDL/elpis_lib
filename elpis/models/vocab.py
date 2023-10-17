@@ -4,6 +4,8 @@ from functools import reduce
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Set
 
+from datasets import DatasetDict
+
 VOCAB_FILE = "vocab.json"
 
 

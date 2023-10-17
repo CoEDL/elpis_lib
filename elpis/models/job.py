@@ -133,6 +133,12 @@ class DataArguments:
             "help": "The configuration name of the dataset to use (via the datasets library)."
         },
     )
+    stream_dataset: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to stream the dataset as opposed to downloading it all at once."
+        },
+    )
     train_split_name: str = field(
         default="train+validation",
         metadata={
