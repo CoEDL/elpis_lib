@@ -218,8 +218,8 @@ def create_vocab(job: Job, dataset: DatasetDict | IterableDatasetDict) -> None:
             vocabs = map(create_vocab_from_batches, splits)
             vocab = reduce(Vocab.merge, vocabs, Vocab({}))
         else:
-            # Note: in this case the values() are datasets, which are treated 
-            # as if they were batches. 
+            # Note: in this case the values() are datasets, which are treated
+            # as if they were batches.
             vocab = create_vocab_from_batches(vocab_datasets.values())
 
         vocab.add(job.data_args.unk_token)
