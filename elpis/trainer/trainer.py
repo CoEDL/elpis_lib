@@ -1,9 +1,10 @@
 import warnings
 from contextlib import nullcontext
+from functools import partial, reduce
 from pathlib import Path
-from typing import Optional
+from typing import Any, Iterable, Optional
 
-from datasets import DatasetDict
+from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict
 from loguru import logger
 from transformers import (
     AutoConfig,
@@ -125,7 +126,7 @@ def create_config(job: Job) -> AutoConfig:
 
 
 def create_tokenizer(
-    job: Job, config: AutoConfig, dataset: DatasetDict
+    job: Job, config: AutoConfig, dataset: DatasetDict | IterableDatasetDict
 ) -> AutoTokenizer:
     tokenizer_name_or_path = job.model_args.tokenizer_name_or_path
     if tokenizer_name_or_path is not None:
@@ -134,39 +135,6 @@ def create_tokenizer(
             token=job.data_args.token,
             trust_remote_code=job.data_args.trust_remote_code,
         )
-
-    training_args = job.training_args
-
-    # save vocab in training output dir
-    tokenizer_name_or_path = job.training_args.output_dir
-    vocab_file = Path(tokenizer_name_or_path) / VOCAB_FILE
-
-    # Delete existing vocab file if overwriting
-    with training_args.main_process_first():
-        if training_args.overwrite_output_dir and vocab_file.is_file():
-            try:
-                vocab_file.unlink()
-            except OSError:
-                # in shared file-systems it might be the case that
-                # two processes try to delete the vocab file at the some time
-                pass
-
-    # Build up a vocab from the dataset.
-    with training_args.main_process_first(desc="dataset map vocabulary creation"):
-        if not vocab_file.is_file():
-            Path(tokenizer_name_or_path).mkdir(exist_ok=True, parents=True)
-            text_column = job.data_args.text_column_name
-
-            vocab = Vocab.from_strings(dataset["train"][text_column])
-            if "test" in dataset:
-                test_vocab = Vocab.from_strings(dataset["test"][text_column])
-                vocab = vocab.merge(test_vocab)
-
-            vocab.add(job.data_args.unk_token)
-            vocab.add(job.data_args.pad_token)
-            vocab.replace(" ", job.data_args.word_delimiter_token)
-            logger.info(f"Vocab: {vocab.vocab}")
-            vocab.save(vocab_file)
 
     # If the tokenizer has just been created,
     # it is defined by `tokenizer_class` if present in config else by `model_type`
@@ -179,12 +147,86 @@ def create_tokenizer(
         "do_lower_case": job.data_args.do_lower_case,
     }
 
+    tokenizer_folder = Path(job.training_args.output_dir)
+    create_vocab(job, dataset)
+
     return AutoTokenizer.from_pretrained(
-        tokenizer_name_or_path,
+        str(tokenizer_folder),
         token=job.data_args.token,
         trust_remote_code=job.data_args.trust_remote_code,
         **tokenizer_kwargs,
     )
+
+
+def create_vocab(job: Job, dataset: DatasetDict | IterableDatasetDict) -> None:
+    """Effectful- creates a vocabulary.json file in the model output dir, for use in tokenization.
+
+    Assumes that we are training our own tokenizer from scratch rather than
+    using a pretrained one.
+
+    Parameters:
+        job: The job containing info about the required training tasks.
+        dataset: The dataset dictionary to create the vocabulary from.
+    """
+    training_args = job.training_args
+
+    # save vocab in training output dir
+    tokenizer_folder = Path(job.training_args.output_dir)
+    tokenizer_folder.mkdir(exist_ok=True, parents=True)
+
+    vocab_file = tokenizer_folder / VOCAB_FILE
+
+    # Delete existing vocab file if we are overwriting
+    with training_args.main_process_first():
+        if training_args.overwrite_output_dir and vocab_file.is_file():
+            try:
+                vocab_file.unlink()
+            except OSError:
+                # in shared file-systems it might be the case that
+                # two processes try to delete the vocab file at the some time
+                pass
+
+    if vocab_file.is_file():
+        return
+
+    # Build up a vocab from the dataset.
+    with training_args.main_process_first(desc="Dataset Vocabulary Creation"):
+
+        def extract_all_chars(text: list[str]):
+            all_text = " ".join(text)
+            vocab = list(set(all_text))
+            return {"vocab": [vocab]}
+
+        vocab_datasets = dataset.map(
+            extract_all_chars,
+            input_columns=job.data_args.text_column_name,
+            batched=True,
+            batch_size=-1,
+            # keep_in_memory=True,
+            # num_proc=job.data_args.preprocessing_num_workers,
+            remove_columns=dataset["train"].column_names,
+        )
+        logger.info(dataset)
+        logger.info(f"Values: {vocab_datasets.values()}")
+
+        def create_vocab_from_batches(batches: Iterable[dict[str, Any]]) -> Vocab:
+            vocabs = map(lambda batch: "".join(batch["vocab"][0]), batches)
+            return Vocab.from_strings(vocabs)
+
+        if job.data_args.stream_dataset:
+            splits: Iterable[IterableDataset] = vocab_datasets.values()
+            vocabs = map(create_vocab_from_batches, splits)
+            vocab = reduce(Vocab.merge, vocabs, Vocab({}))
+        else:
+            # Note: in this case the values() are datasets, which are treated 
+            # as if they were batches. 
+            vocab = create_vocab_from_batches(vocab_datasets.values())
+
+        vocab.add(job.data_args.unk_token)
+        vocab.add(job.data_args.pad_token)
+        vocab.replace(" ", job.data_args.word_delimiter_token)
+        logger.info(f"Created Vocab: {vocab}")
+        vocab.save(tokenizer_folder)
 
 
 def update_config(job: Job, config: AutoConfig, tokenizer: AutoTokenizer) -> None:

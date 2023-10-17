@@ -2,7 +2,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List
 
-from datasets import Audio, DatasetDict, load_dataset
+from datasets import (
+    Audio,
+    Dataset,
+    DatasetDict,
+    IterableDataset,
+    IterableDatasetDict,
+    load_dataset,
+)
 from loguru import logger
 from transformers import AutoFeatureExtractor, AutoTokenizer
 
@@ -12,7 +19,7 @@ from elpis.models.job import Job
 LOGGING_TRANSCRIPT_SAMPLE = 2
 
 
-def create_dataset(job: Job) -> DatasetDict:
+def create_dataset(job: Job) -> DatasetDict | IterableDatasetDict:
     if Path(job.data_args.dataset_name_or_path).is_dir():
         return create_local_dataset(job)
 
@@ -73,14 +80,18 @@ def create_local_dataset(
     return dataset
 
 
-def create_hf_dataset(job: Job) -> DatasetDict:
-    dataset = DatasetDict()
+def create_hf_dataset(job: Job) -> DatasetDict | IterableDatasetDict:
     data_args = job.data_args
+
+    dataset = DatasetDict()
+    if data_args.stream_dataset:
+        dataset = IterableDatasetDict()
 
     if job.training_args.do_train:
         dataset["train"] = load_dataset(
             data_args.dataset_name_or_path,
             data_args.dataset_config_name,
+            streaming=data_args.stream_dataset,
             split=data_args.train_split_name,
             token=data_args.token,
         )
@@ -107,6 +118,7 @@ def create_hf_dataset(job: Job) -> DatasetDict:
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             token=data_args.token,
+            streaming=data_args.stream_dataset,
         )
 
     return dataset
@@ -116,8 +128,8 @@ def prepare_dataset(
     job: Job,
     tokenizer: AutoTokenizer,
     feature_extractor: AutoFeatureExtractor,
-    dataset: DatasetDict,
-) -> DatasetDict:
+    dataset: DatasetDict | IterableDatasetDict,
+) -> DatasetDict | IterableDatasetDict:
     """Runs some preprocessing over the given dataset.
 
     Parameters:
@@ -163,18 +175,23 @@ def prepare_dataset(
 
     with job.training_args.main_process_first(desc="dataset map preprocessing"):
         worker_count = job.data_args.preprocessing_num_workers
+
+        kwargs = {}
+        if not job.data_args.stream_dataset:
+            kwargs = {
+                "num_proc": worker_count,
+                "desc": "Dataset Preprocessing",
+            }
+
         dataset = dataset.map(
             _prepare_dataset,
             remove_columns=next(iter(dataset.values())).column_names,
-            num_proc=worker_count,
-            desc="preprocess datasets",
+            **kwargs,
         )
 
         # filter data that is shorter than min_input_length
         dataset = dataset.filter(
-            is_audio_in_length_range,
-            num_proc=worker_count,
-            input_columns=["input_length"],
+            is_audio_in_length_range, input_columns=["input_length"], **kwargs
         )
 
     logger.info(f"Test encoding labels: {dataset['train'][0]['labels']}")
@@ -182,20 +199,29 @@ def prepare_dataset(
     return dataset
 
 
-def constrain_to_max_samples(job: Job, dataset: DatasetDict) -> DatasetDict:
+def constrain_to_max_samples(
+    job: Job, dataset: DatasetDict | IterableDatasetDict
+) -> DatasetDict | IterableDatasetDict:
     max_train_samples = job.data_args.max_train_samples
     max_eval_samples = job.data_args.max_eval_samples
 
+    def take(n: int, dataset: Dataset | IterableDataset) -> Dataset | IterableDataset:
+        if job.data_args.stream_dataset:
+            return dataset.take(n)  # type: ignore
+        return dataset.select(range(n))  # type: ignore
+
     if job.training_args.do_train and max_train_samples is not None:
-        dataset["train"] = dataset["train"].select(range(max_train_samples))
+        dataset["train"] = take(max_train_samples, dataset["train"])  # type: ignore
 
     if job.training_args.do_eval and max_eval_samples is not None:
-        dataset["eval"] = dataset["eval"].select(range(max_eval_samples))
+        dataset["eval"] = take(max_eval_samples, dataset["eval"])  # type: ignore
 
     return dataset
 
 
-def clean_dataset(job: Job, dataset: DatasetDict) -> DatasetDict:
+def clean_dataset(
+    job: Job, dataset: DatasetDict | IterableDatasetDict
+) -> DatasetDict | IterableDatasetDict:
     if not job.data_args.do_clean:
         return dataset
 
@@ -219,9 +245,6 @@ def clean_dataset(job: Job, dataset: DatasetDict) -> DatasetDict:
         return batch
 
     with job.training_args.main_process_first(desc="Dataset cleaning."):
-        dataset = dataset.map(
-            clean,
-            desc="Cleaning the dataset and standardizing case.",
-        )
+        dataset = dataset.map(clean)
 
     return dataset
