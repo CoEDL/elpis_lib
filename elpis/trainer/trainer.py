@@ -1,6 +1,6 @@
 import warnings
 from contextlib import nullcontext
-from functools import partial, reduce
+from functools import reduce
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -48,6 +48,7 @@ def run_job(
         cache_dir = job.model_args.cache_dir
         Path(output_dir).mkdir(exist_ok=True, parents=True)
 
+        job.save(Path(output_dir) / "job.json")
         set_seed(job.training_args.seed)
 
         logger.info("Preparing Datasets...")
@@ -82,7 +83,7 @@ def run_job(
                 config.save_pretrained(output_dir)  # type: ignore
 
         try:
-            processor = AutoProcessor.from_pretrained(job.training_args.output_dir)
+            processor = AutoProcessor.from_pretrained(output_dir)
         except (OSError, KeyError):
             warnings.warn(
                 "Loading a processor from a feature extractor config that does not"
@@ -91,7 +92,7 @@ def run_job(
                 " `'processor_class': 'Wav2Vec2Processor'`",
                 FutureWarning,
             )
-            processor = Wav2Vec2Processor.from_pretrained(job.training_args.output_dir)
+            processor = Wav2Vec2Processor.from_pretrained(output_dir)
 
         data_collator = DataCollatorCTCWithPadding(processor=processor)  # type: ignore
 
@@ -299,7 +300,7 @@ def last_checkpoint(job: Job) -> Optional[str]:
     return checkpoint
 
 
-def train(job: Job, trainer: Trainer, dataset: DatasetDict):
+def train(job: Job, trainer: Trainer, dataset: DatasetDict | IterableDatasetDict):
     if not job.training_args.do_train:
         logger.info("Skipping training: `job.training_args.do_train` is false.")
         return
@@ -327,7 +328,7 @@ def train(job: Job, trainer: Trainer, dataset: DatasetDict):
     trainer.save_state()
 
 
-def evaluate(job: Job, trainer: Trainer, dataset: DatasetDict):
+def evaluate(job: Job, trainer: Trainer, dataset: DatasetDict | IterableDatasetDict):
     if not job.training_args.do_eval:
         logger.info("Skipping eval: `job.training_args.do_eval` is false.")
         return

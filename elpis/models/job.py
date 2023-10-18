@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from copy import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -9,9 +11,6 @@ from transformers import HfArgumentParser, TrainingArguments
 
 def list_field(default=None, metadata=None):
     return field(default_factory=lambda: default, metadata=metadata)
-
-
-DEFAULT_METRICS = ("wer", "cer")
 
 
 @dataclass
@@ -109,6 +108,10 @@ class ModelArguments:
             "Only relevant when training an instance of Wav2Vec2ForCTC."
         },
     )
+
+    def to_dict(self) -> Dict[str, Any]:
+        result = dict(self.__dict__)
+        return result
 
 
 @dataclass
@@ -219,7 +222,7 @@ class DataArguments:
         metadata={"help": "Whether the target text should be lower cased."},
     )
     eval_metrics: List[str] = list_field(  # type: ignore
-        default=DEFAULT_METRICS,
+        default=["wer", "cer"],
         metadata={
             "help": "A list of metrics the model should be evaluated on. E.g. `('wer', 'cer')`"
         },
@@ -299,6 +302,10 @@ class DataArguments:
         },
     )
 
+    def to_dict(self) -> Dict[str, Any]:
+        result = dict(self.__dict__)
+        return result
+
 
 @dataclass
 class Job:
@@ -334,6 +341,13 @@ class Job:
             model_args=model_args, data_args=data_args, training_args=training_args
         )
 
+    def save(self, path: Path, overwrite=True) -> None:
+        if not overwrite and path.is_file():
+            return
+
+        with open(path, "w") as out_file:
+            json.dump(self.to_dict(), out_file)
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> Job:
         (
@@ -343,4 +357,23 @@ class Job:
         ) = Job.parser().parse_dict(data)
         return cls(
             model_args=model_args, data_args=data_args, training_args=training_args
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return (
+            self.training_args.to_dict()
+            | self.data_args.to_dict()
+            | self.model_args.to_dict()
+        )
+
+    def __eq__(self, __value: object) -> bool:
+        if not isinstance(__value, Job):
+            return False
+
+        job = __value
+
+        return (
+            self.training_args.to_dict() == job.training_args.to_dict()
+            and self.model_args == job.model_args
+            and self.data_args == job.data_args
         )
