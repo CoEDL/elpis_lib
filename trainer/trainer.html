@@ -26,91 +26,380 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from contextlib import nullcontext
+<pre><code class="python">import warnings
+from contextlib import nullcontext
+from functools import reduce
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Iterable, Optional
 
+from datasets import Dataset, DatasetDict, IterableDataset, IterableDatasetDict
 from loguru import logger
-from tokenizers import Tokenizer
-from transformers import AutoModelForCTC, AutoProcessor, EvalPrediction, Trainer
+from transformers import (
+    AutoConfig,
+    AutoFeatureExtractor,
+    AutoModelForCTC,
+    AutoProcessor,
+    AutoTokenizer,
+    Trainer,
+    Wav2Vec2Processor,
+    set_seed,
+)
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 from elpis.datasets import create_dataset, prepare_dataset
+from elpis.models.job import Job
+from elpis.models.vocab import VOCAB_FILE, Vocab
 from elpis.trainer.data_collator import DataCollatorCTCWithPadding
-from elpis.trainer.job import TrainingJob
 from elpis.trainer.metrics import create_metrics
 from elpis.trainer.utils import log_to_file
 
 
-def train(
-    job: TrainingJob,
-    output_dir: Path,
-    dataset_dir: Path,
-    cache_dir: Optional[Path] = None,
+def run_job(
+    job: Job,
     log_file: Optional[Path] = None,
 ) -&gt; Path:
     &#34;&#34;&#34;Fine-tunes a model for use in transcription.
 
     Parameters:
         job: Info about the training job, e.g. training options.
-        output_dir: Where to save the trained model.
         dataset_dir: A directory containing the preprocessed dataset to train with.
-        cache_dir: A directory to use for caching HFT downloads and datasets.
         log_file: An optional file to write training logs to.
 
     Returns:
         A path to the folder containing the trained model.
     &#34;&#34;&#34;
 
-    context = log_to_file(log_file) if log_file is not None else nullcontext()
-    with context:
+    logging_context = log_to_file(log_file) if log_file is not None else nullcontext()
+    with logging_context:
+        # Setup required directories.
+        output_dir = job.training_args.output_dir
+        cache_dir = job.model_args.cache_dir
+        Path(output_dir).mkdir(exist_ok=True, parents=True)
+
+        job.save(Path(output_dir) / &#34;job.json&#34;)
+        set_seed(job.training_args.seed)
+
         logger.info(&#34;Preparing Datasets...&#34;)
-        dataset = create_dataset(dataset_dir, cache_dir)
-        processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
-        dataset = prepare_dataset(dataset, processor)
+        config = create_config(job)
+        dataset = create_dataset(job)
+
+        tokenizer = create_tokenizer(job, config, dataset)
+        logger.info(f&#34;Tokenizer: {tokenizer}&#34;)  # type: ignore
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
+            job.model_args.model_name_or_path,
+            cache_dir=cache_dir,
+            token=job.data_args.token,
+            trust_remote_code=job.data_args.trust_remote_code,
+        )
+        dataset = prepare_dataset(job, tokenizer, feature_extractor, dataset)
         logger.info(&#34;Finished Preparing Datasets&#34;)
 
+        update_config(job, config, tokenizer)
+
         logger.info(&#34;Downloading pretrained model...&#34;)
-        model = AutoModelForCTC.from_pretrained(
-            job.base_model,
-            cache_dir=cache_dir,
-            ctc_loss_reduction=&#34;mean&#34;,
-            pad_token_id=processor.tokenizer.pad_token_id,
-        )
+        model = create_ctc_model(job, config)
         logger.info(&#34;Downloaded model.&#34;)
 
-        if job.options.freeze_feature_extractor:
-            model.freeze_feature_extractor()
+        # Now save everything to be able to create a single processor later
+        # make sure all processes wait until data is saved
+        logger.info(&#34;Saving config, tokenizer and feature extractor.&#34;)
+        with job.training_args.main_process_first():
+            # only the main process saves them
+            if is_main_process(job.training_args.local_rank):
+                feature_extractor.save_pretrained(output_dir)
+                tokenizer.save_pretrained(output_dir)  # type: ignore
+                config.save_pretrained(output_dir)  # type: ignore
 
-        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        output_dir.mkdir(exist_ok=True, parents=True)
+        try:
+            processor = AutoProcessor.from_pretrained(output_dir)
+        except (OSError, KeyError):
+            warnings.warn(
+                &#34;Loading a processor from a feature extractor config that does not&#34;
+                &#34; include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following &#34;
+                &#34; attribute to your `preprocessor_config.json` file to suppress this warning: &#34;
+                &#34; `&#39;processor_class&#39;: &#39;Wav2Vec2Processor&#39;`&#34;,
+                FutureWarning,
+            )
+            processor = Wav2Vec2Processor.from_pretrained(output_dir)
 
+        data_collator = DataCollatorCTCWithPadding(processor=processor)  # type: ignore
+
+        # Initialize Trainer
         trainer = Trainer(
-            model=model,
-            args=job.to_training_args(output_dir),
-            train_dataset=dataset[&#34;train&#34;],  # type: ignore
-            eval_dataset=dataset[&#34;test&#34;],  # type: ignore
-            tokenizer=processor.feature_extractor,
+            model=model,  # type: ignore
             data_collator=data_collator,
-            compute_metrics=create_metrics(job.metrics, processor),
+            args=job.training_args,
+            compute_metrics=create_metrics(job.data_args.eval_metrics, processor),
+            train_dataset=dataset[&#34;train&#34;] if job.training_args.do_train else None,  # type: ignore
+            eval_dataset=dataset[&#34;eval&#34;] if job.training_args.do_eval else None,  # type: ignore
+            tokenizer=processor,  # type: ignore
         )
 
         logger.info(f&#34;Begin training model...&#34;)
-        trainer.train()
+        train(job, trainer, dataset)
         logger.info(f&#34;Finished training!&#34;)
 
-        logger.info(f&#34;Saving model @ {output_dir}&#34;)
-        trainer.save_model()
-        trainer.save_state()
-        processor.save_pretrained(output_dir)
-        logger.info(f&#34;Model written to disk.&#34;)
+        evaluate(job, trainer, dataset)
+        clean_up(job, trainer)
 
-        metrics = trainer.evaluate()
-        logger.info(&#34;==== Metrics ====&#34;)
-        trainer.log_metrics(&#34;eval&#34;, metrics)
-        trainer.save_metrics(&#34;eval&#34;, metrics)
-        logger.info(metrics)
+        return Path(output_dir)
 
-        return output_dir</code></pre>
+
+def create_config(job: Job) -&gt; AutoConfig:
+    return AutoConfig.from_pretrained(
+        job.model_args.model_name_or_path,
+        cache_dir=job.model_args.cache_dir,
+        token=job.data_args.token,
+        trust_remote_code=job.data_args.trust_remote_code,
+    )
+
+
+def create_tokenizer(
+    job: Job, config: AutoConfig, dataset: DatasetDict | IterableDatasetDict
+) -&gt; AutoTokenizer:
+    tokenizer_name_or_path = job.model_args.tokenizer_name_or_path
+    if tokenizer_name_or_path is not None:
+        return AutoTokenizer.from_pretrained(
+            tokenizer_name_or_path,
+            token=job.data_args.token,
+            trust_remote_code=job.data_args.trust_remote_code,
+        )
+
+    # If the tokenizer has just been created,
+    # it is defined by `tokenizer_class` if present in config else by `model_type`
+    tokenizer_kwargs = {
+        &#34;config&#34;: config if config.tokenizer_class is not None else None,  # type: ignore
+        &#34;tokenizer_type&#34;: config.model_type if config.tokenizer_class is None else None,  # type: ignore
+        &#34;unk_token&#34;: job.data_args.unk_token,
+        &#34;pad_token&#34;: job.data_args.pad_token,
+        &#34;word_delimiter_token&#34;: job.data_args.word_delimiter_token,
+        &#34;do_lower_case&#34;: job.data_args.do_lower_case,
+    }
+
+    tokenizer_folder = Path(job.training_args.output_dir)
+    create_vocab(job, dataset)
+
+    return AutoTokenizer.from_pretrained(
+        str(tokenizer_folder),
+        token=job.data_args.token,
+        trust_remote_code=job.data_args.trust_remote_code,
+        **tokenizer_kwargs,
+    )
+
+
+def create_vocab(job: Job, dataset: DatasetDict | IterableDatasetDict) -&gt; None:
+    &#34;&#34;&#34;Effectful- creates a vocabulary.json file in the model output dir, for use in tokenization.
+
+    Assumes that we are training our own tokenizer from scratch rather than
+    using a pretrained one.
+
+    Parameters:
+        job: The job containing info about the required training tasks.
+        dataset: The dataset dictionary to create the vocabulary from.
+    &#34;&#34;&#34;
+    training_args = job.training_args
+
+    # save vocab in training output dir
+    tokenizer_folder = Path(job.training_args.output_dir)
+    tokenizer_folder.mkdir(exist_ok=True, parents=True)
+
+    vocab_file = tokenizer_folder / VOCAB_FILE
+
+    # Delete existing vocab file if we are overwriting
+    with training_args.main_process_first():
+        if training_args.overwrite_output_dir and vocab_file.is_file():
+            try:
+                vocab_file.unlink()
+            except OSError:
+                # in shared file-systems it might be the case that
+                # two processes try to delete the vocab file at the some time
+                pass
+
+    if vocab_file.is_file():
+        return
+
+    # Build up a vocab from the dataset.
+    with training_args.main_process_first(desc=&#34;Dataset Vocabulary Creation&#34;):
+
+        def extract_all_chars(text: list[str]):
+            all_text = &#34; &#34;.join(text)
+            vocab = list(set(all_text))
+            return {&#34;vocab&#34;: [vocab]}
+
+        vocab_datasets = dataset.map(
+            extract_all_chars,
+            input_columns=job.data_args.text_column_name,
+            batched=True,
+            batch_size=-1,
+            # keep_in_memory=True,
+            # num_proc=job.data_args.preprocessing_num_workers,
+            remove_columns=dataset[&#34;train&#34;].column_names,
+        )
+        logger.info(dataset)
+        logger.info(f&#34;Values: {vocab_datasets.values()}&#34;)
+
+        def create_vocab_from_batches(batches: Iterable[dict[str, Any]]) -&gt; Vocab:
+            vocabs = map(lambda batch: &#34;&#34;.join(batch[&#34;vocab&#34;][0]), batches)
+            return Vocab.from_strings(vocabs)
+
+        if job.data_args.stream_dataset:
+            splits: Iterable[IterableDataset] = vocab_datasets.values()
+            vocabs = map(create_vocab_from_batches, splits)
+            vocab = reduce(Vocab.merge, vocabs, Vocab({}))
+        else:
+            # Note: in this case the values() are datasets, which are treated
+            # as if they were batches.
+            vocab = create_vocab_from_batches(vocab_datasets.values())
+
+        vocab.add(job.data_args.unk_token)
+        vocab.add(job.data_args.pad_token)
+        vocab.replace(&#34; &#34;, job.data_args.word_delimiter_token)
+        logger.info(f&#34;Created Vocab: {vocab}&#34;)
+        vocab.save(tokenizer_folder)
+
+
+def update_config(job: Job, config: AutoConfig, tokenizer: AutoTokenizer) -&gt; None:
+    config.update(  # type: ignore
+        {
+            &#34;feat_proj_dropout&#34;: job.model_args.feat_proj_dropout,
+            &#34;attention_dropout&#34;: job.model_args.attention_dropout,
+            &#34;hidden_dropout&#34;: job.model_args.hidden_dropout,
+            &#34;final_dropout&#34;: job.model_args.final_dropout,
+            &#34;mask_time_prob&#34;: job.model_args.mask_time_prob,
+            &#34;mask_time_length&#34;: job.model_args.mask_time_length,
+            &#34;mask_feature_prob&#34;: job.model_args.mask_feature_prob,
+            &#34;mask_feature_length&#34;: job.model_args.mask_feature_length,
+            &#34;gradient_checkpointing&#34;: job.training_args.gradient_checkpointing,
+            &#34;layerdrop&#34;: job.model_args.layerdrop,
+            &#34;ctc_loss_reduction&#34;: job.model_args.ctc_loss_reduction,
+            &#34;ctc_zero_infinity&#34;: job.model_args.ctc_zero_infinity,
+            &#34;pad_token_id&#34;: tokenizer.pad_token_id,  # type: ignore
+            &#34;bos_token_id&#34;: tokenizer.bos_token_id,  # type: ignore
+            &#34;eos_token_id&#34;: tokenizer.eos_token_id,  # type: ignore
+            &#34;vocab_size&#34;: len(tokenizer),  # type: ignore
+            &#34;activation_dropout&#34;: job.model_args.activation_dropout,
+        }
+    )
+
+
+def create_ctc_model(job: Job, config: AutoConfig) -&gt; AutoModelForCTC:
+    model = AutoModelForCTC.from_pretrained(
+        job.model_args.model_name_or_path,
+        cache_dir=job.model_args.cache_dir,
+        config=config,
+        token=job.data_args.token,
+        trust_remote_code=job.data_args.trust_remote_code,
+    )
+
+    # freeze encoder
+    if job.model_args.freeze_feature_encoder:
+        model.freeze_feature_encoder()
+
+    return model
+
+
+def last_checkpoint(job: Job) -&gt; Optional[str]:
+    &#34;&#34;&#34;Returns the string corresponding to the path or name of the last
+    training checkpoint, if it exists.&#34;&#34;&#34;
+    training_args = job.training_args
+    output_dir = Path(training_args.output_dir)
+
+    if not output_dir.is_dir():
+        return None
+    if not training_args.do_train:
+        return None
+    if training_args.overwrite_output_dir:
+        return None
+
+    checkpoint = get_last_checkpoint(training_args.output_dir)
+    checkpoint_folders = [path for path in output_dir.iterdir() if path.is_dir()]
+
+    if checkpoint is None and len(checkpoint_folders) &gt; 0:
+        raise ValueError(
+            f&#34;Output directory ({training_args.output_dir}) already exists and is not empty. &#34;
+            &#34;Set `overwrite_output_dir` in training_args to overcome.&#34;
+        )
+    elif checkpoint is not None:
+        logger.info(
+            f&#34;Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change &#34;
+            &#34;the `--output_dir` or add `--overwrite_output_dir` to train from scratch.&#34;
+        )
+
+    return checkpoint
+
+
+def train(job: Job, trainer: Trainer, dataset: DatasetDict | IterableDatasetDict):
+    if not job.training_args.do_train:
+        logger.info(&#34;Skipping training: `job.training_args.do_train` is false.&#34;)
+        return
+
+    checkpoint = last_checkpoint(job)
+    if checkpoint is None and Path(job.model_args.model_name_or_path).is_dir():
+        checkpoint = job.model_args.model_name_or_path
+
+    train_result = trainer.train(resume_from_checkpoint=checkpoint)
+    trainer.save_model()
+
+    metrics = train_result.metrics
+
+    # Add training samples to metrics
+    max_train_samples = (
+        job.data_args.max_train_samples
+        if job.data_args.max_train_samples is not None
+        else len(dataset[&#34;train&#34;])
+    )
+    metrics[&#34;train_samples&#34;] = min(max_train_samples, len(dataset[&#34;train&#34;]))
+
+    trainer.log_metrics(&#34;train&#34;, metrics)
+    trainer.save_metrics(&#34;train&#34;, metrics)
+    trainer.save_model()
+    trainer.save_state()
+
+
+def evaluate(job: Job, trainer: Trainer, dataset: DatasetDict | IterableDatasetDict):
+    if not job.training_args.do_eval:
+        logger.info(&#34;Skipping eval: `job.training_args.do_eval` is false.&#34;)
+        return
+
+    logger.info(&#34;*** Evaluate ***&#34;)
+    metrics = trainer.evaluate()
+    max_eval_samples = (
+        job.data_args.max_eval_samples
+        if job.data_args.max_eval_samples is not None
+        else len(dataset[&#34;eval&#34;])
+    )
+    metrics[&#34;eval_samples&#34;] = min(max_eval_samples, len(dataset[&#34;eval&#34;]))
+
+    trainer.log_metrics(&#34;eval&#34;, metrics)
+    trainer.save_metrics(&#34;eval&#34;, metrics)
+    logger.info(metrics)
+
+
+def clean_up(job: Job, trainer: Trainer):
+    &#34;&#34;&#34;Writes a model card, and optionally pushes the trained model to the
+    huggingface hub.&#34;&#34;&#34;
+    config_name = (
+        job.data_args.dataset_config_name
+        if job.data_args.dataset_config_name is not None
+        else &#34;na&#34;
+    )
+    kwargs = {
+        &#34;finetuned_from&#34;: job.model_args.model_name_or_path,
+        &#34;tasks&#34;: &#34;automatic-speech-recognition&#34;,
+        &#34;tags&#34;: [&#34;automatic-speech-recognition&#34;, job.data_args.dataset_name_or_path],
+        &#34;dataset_args&#34;: (
+            f&#34;Config: {config_name}, Training split: {job.data_args.train_split_name}, Eval split:&#34;
+            f&#34; {job.data_args.eval_split_name}&#34;
+        ),
+        &#34;dataset&#34;: f&#34;{job.data_args.dataset_name_or_path.upper()} - {config_name.upper()}&#34;,
+    }
+    if &#34;common_voice&#34; in job.data_args.dataset_name_or_path:
+        kwargs[&#34;language&#34;] = config_name
+
+    if job.training_args.push_to_hub:
+        trainer.push_to_hub(**kwargs)
+    else:
+        trainer.create_model_card(**kwargs)</code></pre>
 </details>
 </section>
 <section>
@@ -120,16 +409,289 @@ def train(
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="elpis.trainer.trainer.train"><code class="name flex">
-<span>def <span class="ident">train</span></span>(<span>job: <a title="elpis.trainer.job.TrainingJob" href="job.html#elpis.trainer.job.TrainingJob">TrainingJob</a>, output_dir: pathlib.Path, dataset_dir: pathlib.Path, cache_dir: Optional[pathlib.Path] = None, log_file: Optional[pathlib.Path] = None) ‑> pathlib.Path</span>
+<dt id="elpis.trainer.trainer.clean_up"><code class="name flex">
+<span>def <span class="ident">clean_up</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, trainer: transformers.trainer.Trainer)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Writes a model card, and optionally pushes the trained model to the
+huggingface hub.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def clean_up(job: Job, trainer: Trainer):
+    &#34;&#34;&#34;Writes a model card, and optionally pushes the trained model to the
+    huggingface hub.&#34;&#34;&#34;
+    config_name = (
+        job.data_args.dataset_config_name
+        if job.data_args.dataset_config_name is not None
+        else &#34;na&#34;
+    )
+    kwargs = {
+        &#34;finetuned_from&#34;: job.model_args.model_name_or_path,
+        &#34;tasks&#34;: &#34;automatic-speech-recognition&#34;,
+        &#34;tags&#34;: [&#34;automatic-speech-recognition&#34;, job.data_args.dataset_name_or_path],
+        &#34;dataset_args&#34;: (
+            f&#34;Config: {config_name}, Training split: {job.data_args.train_split_name}, Eval split:&#34;
+            f&#34; {job.data_args.eval_split_name}&#34;
+        ),
+        &#34;dataset&#34;: f&#34;{job.data_args.dataset_name_or_path.upper()} - {config_name.upper()}&#34;,
+    }
+    if &#34;common_voice&#34; in job.data_args.dataset_name_or_path:
+        kwargs[&#34;language&#34;] = config_name
+
+    if job.training_args.push_to_hub:
+        trainer.push_to_hub(**kwargs)
+    else:
+        trainer.create_model_card(**kwargs)</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.create_config"><code class="name flex">
+<span>def <span class="ident">create_config</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>) ‑> transformers.models.auto.configuration_auto.AutoConfig</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_config(job: Job) -&gt; AutoConfig:
+    return AutoConfig.from_pretrained(
+        job.model_args.model_name_or_path,
+        cache_dir=job.model_args.cache_dir,
+        token=job.data_args.token,
+        trust_remote_code=job.data_args.trust_remote_code,
+    )</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.create_ctc_model"><code class="name flex">
+<span>def <span class="ident">create_ctc_model</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, config: transformers.models.auto.configuration_auto.AutoConfig) ‑> transformers.models.auto.modeling_auto.AutoModelForCTC</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_ctc_model(job: Job, config: AutoConfig) -&gt; AutoModelForCTC:
+    model = AutoModelForCTC.from_pretrained(
+        job.model_args.model_name_or_path,
+        cache_dir=job.model_args.cache_dir,
+        config=config,
+        token=job.data_args.token,
+        trust_remote_code=job.data_args.trust_remote_code,
+    )
+
+    # freeze encoder
+    if job.model_args.freeze_feature_encoder:
+        model.freeze_feature_encoder()
+
+    return model</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.create_tokenizer"><code class="name flex">
+<span>def <span class="ident">create_tokenizer</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, config: transformers.models.auto.configuration_auto.AutoConfig, dataset: datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict) ‑> transformers.models.auto.tokenization_auto.AutoTokenizer</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_tokenizer(
+    job: Job, config: AutoConfig, dataset: DatasetDict | IterableDatasetDict
+) -&gt; AutoTokenizer:
+    tokenizer_name_or_path = job.model_args.tokenizer_name_or_path
+    if tokenizer_name_or_path is not None:
+        return AutoTokenizer.from_pretrained(
+            tokenizer_name_or_path,
+            token=job.data_args.token,
+            trust_remote_code=job.data_args.trust_remote_code,
+        )
+
+    # If the tokenizer has just been created,
+    # it is defined by `tokenizer_class` if present in config else by `model_type`
+    tokenizer_kwargs = {
+        &#34;config&#34;: config if config.tokenizer_class is not None else None,  # type: ignore
+        &#34;tokenizer_type&#34;: config.model_type if config.tokenizer_class is None else None,  # type: ignore
+        &#34;unk_token&#34;: job.data_args.unk_token,
+        &#34;pad_token&#34;: job.data_args.pad_token,
+        &#34;word_delimiter_token&#34;: job.data_args.word_delimiter_token,
+        &#34;do_lower_case&#34;: job.data_args.do_lower_case,
+    }
+
+    tokenizer_folder = Path(job.training_args.output_dir)
+    create_vocab(job, dataset)
+
+    return AutoTokenizer.from_pretrained(
+        str(tokenizer_folder),
+        token=job.data_args.token,
+        trust_remote_code=job.data_args.trust_remote_code,
+        **tokenizer_kwargs,
+    )</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.create_vocab"><code class="name flex">
+<span>def <span class="ident">create_vocab</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, dataset: datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Effectful- creates a vocabulary.json file in the model output dir, for use in tokenization.</p>
+<p>Assumes that we are training our own tokenizer from scratch rather than
+using a pretrained one.</p>
+<h2 id="parameters">Parameters</h2>
+<p>job: The job containing info about the required training tasks.
+dataset: The dataset dictionary to create the vocabulary from.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_vocab(job: Job, dataset: DatasetDict | IterableDatasetDict) -&gt; None:
+    &#34;&#34;&#34;Effectful- creates a vocabulary.json file in the model output dir, for use in tokenization.
+
+    Assumes that we are training our own tokenizer from scratch rather than
+    using a pretrained one.
+
+    Parameters:
+        job: The job containing info about the required training tasks.
+        dataset: The dataset dictionary to create the vocabulary from.
+    &#34;&#34;&#34;
+    training_args = job.training_args
+
+    # save vocab in training output dir
+    tokenizer_folder = Path(job.training_args.output_dir)
+    tokenizer_folder.mkdir(exist_ok=True, parents=True)
+
+    vocab_file = tokenizer_folder / VOCAB_FILE
+
+    # Delete existing vocab file if we are overwriting
+    with training_args.main_process_first():
+        if training_args.overwrite_output_dir and vocab_file.is_file():
+            try:
+                vocab_file.unlink()
+            except OSError:
+                # in shared file-systems it might be the case that
+                # two processes try to delete the vocab file at the some time
+                pass
+
+    if vocab_file.is_file():
+        return
+
+    # Build up a vocab from the dataset.
+    with training_args.main_process_first(desc=&#34;Dataset Vocabulary Creation&#34;):
+
+        def extract_all_chars(text: list[str]):
+            all_text = &#34; &#34;.join(text)
+            vocab = list(set(all_text))
+            return {&#34;vocab&#34;: [vocab]}
+
+        vocab_datasets = dataset.map(
+            extract_all_chars,
+            input_columns=job.data_args.text_column_name,
+            batched=True,
+            batch_size=-1,
+            # keep_in_memory=True,
+            # num_proc=job.data_args.preprocessing_num_workers,
+            remove_columns=dataset[&#34;train&#34;].column_names,
+        )
+        logger.info(dataset)
+        logger.info(f&#34;Values: {vocab_datasets.values()}&#34;)
+
+        def create_vocab_from_batches(batches: Iterable[dict[str, Any]]) -&gt; Vocab:
+            vocabs = map(lambda batch: &#34;&#34;.join(batch[&#34;vocab&#34;][0]), batches)
+            return Vocab.from_strings(vocabs)
+
+        if job.data_args.stream_dataset:
+            splits: Iterable[IterableDataset] = vocab_datasets.values()
+            vocabs = map(create_vocab_from_batches, splits)
+            vocab = reduce(Vocab.merge, vocabs, Vocab({}))
+        else:
+            # Note: in this case the values() are datasets, which are treated
+            # as if they were batches.
+            vocab = create_vocab_from_batches(vocab_datasets.values())
+
+        vocab.add(job.data_args.unk_token)
+        vocab.add(job.data_args.pad_token)
+        vocab.replace(&#34; &#34;, job.data_args.word_delimiter_token)
+        logger.info(f&#34;Created Vocab: {vocab}&#34;)
+        vocab.save(tokenizer_folder)</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.evaluate"><code class="name flex">
+<span>def <span class="ident">evaluate</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, trainer: transformers.trainer.Trainer, dataset: datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def evaluate(job: Job, trainer: Trainer, dataset: DatasetDict | IterableDatasetDict):
+    if not job.training_args.do_eval:
+        logger.info(&#34;Skipping eval: `job.training_args.do_eval` is false.&#34;)
+        return
+
+    logger.info(&#34;*** Evaluate ***&#34;)
+    metrics = trainer.evaluate()
+    max_eval_samples = (
+        job.data_args.max_eval_samples
+        if job.data_args.max_eval_samples is not None
+        else len(dataset[&#34;eval&#34;])
+    )
+    metrics[&#34;eval_samples&#34;] = min(max_eval_samples, len(dataset[&#34;eval&#34;]))
+
+    trainer.log_metrics(&#34;eval&#34;, metrics)
+    trainer.save_metrics(&#34;eval&#34;, metrics)
+    logger.info(metrics)</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.last_checkpoint"><code class="name flex">
+<span>def <span class="ident">last_checkpoint</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>) ‑> Optional[str]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Returns the string corresponding to the path or name of the last
+training checkpoint, if it exists.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def last_checkpoint(job: Job) -&gt; Optional[str]:
+    &#34;&#34;&#34;Returns the string corresponding to the path or name of the last
+    training checkpoint, if it exists.&#34;&#34;&#34;
+    training_args = job.training_args
+    output_dir = Path(training_args.output_dir)
+
+    if not output_dir.is_dir():
+        return None
+    if not training_args.do_train:
+        return None
+    if training_args.overwrite_output_dir:
+        return None
+
+    checkpoint = get_last_checkpoint(training_args.output_dir)
+    checkpoint_folders = [path for path in output_dir.iterdir() if path.is_dir()]
+
+    if checkpoint is None and len(checkpoint_folders) &gt; 0:
+        raise ValueError(
+            f&#34;Output directory ({training_args.output_dir}) already exists and is not empty. &#34;
+            &#34;Set `overwrite_output_dir` in training_args to overcome.&#34;
+        )
+    elif checkpoint is not None:
+        logger.info(
+            f&#34;Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change &#34;
+            &#34;the `--output_dir` or add `--overwrite_output_dir` to train from scratch.&#34;
+        )
+
+    return checkpoint</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.run_job"><code class="name flex">
+<span>def <span class="ident">run_job</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, log_file: Optional[pathlib.Path] = None) ‑> pathlib.Path</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Fine-tunes a model for use in transcription.</p>
 <h2 id="parameters">Parameters</h2>
 <p>job: Info about the training job, e.g. training options.
-output_dir: Where to save the trained model.
 dataset_dir: A directory containing the preprocessed dataset to train with.
-cache_dir: A directory to use for caching HFT downloads and datasets.
 log_file: An optional file to write training logs to.</p>
 <h2 id="returns">Returns</h2>
 <p>A path to the folder containing the trained model.</p></div>
@@ -137,76 +699,165 @@ log_file: An optional file to write training logs to.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def train(
-    job: TrainingJob,
-    output_dir: Path,
-    dataset_dir: Path,
-    cache_dir: Optional[Path] = None,
+<pre><code class="python">def run_job(
+    job: Job,
     log_file: Optional[Path] = None,
 ) -&gt; Path:
     &#34;&#34;&#34;Fine-tunes a model for use in transcription.
 
     Parameters:
         job: Info about the training job, e.g. training options.
-        output_dir: Where to save the trained model.
         dataset_dir: A directory containing the preprocessed dataset to train with.
-        cache_dir: A directory to use for caching HFT downloads and datasets.
         log_file: An optional file to write training logs to.
 
     Returns:
         A path to the folder containing the trained model.
     &#34;&#34;&#34;
 
-    context = log_to_file(log_file) if log_file is not None else nullcontext()
-    with context:
+    logging_context = log_to_file(log_file) if log_file is not None else nullcontext()
+    with logging_context:
+        # Setup required directories.
+        output_dir = job.training_args.output_dir
+        cache_dir = job.model_args.cache_dir
+        Path(output_dir).mkdir(exist_ok=True, parents=True)
+
+        job.save(Path(output_dir) / &#34;job.json&#34;)
+        set_seed(job.training_args.seed)
+
         logger.info(&#34;Preparing Datasets...&#34;)
-        dataset = create_dataset(dataset_dir, cache_dir)
-        processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
-        dataset = prepare_dataset(dataset, processor)
+        config = create_config(job)
+        dataset = create_dataset(job)
+
+        tokenizer = create_tokenizer(job, config, dataset)
+        logger.info(f&#34;Tokenizer: {tokenizer}&#34;)  # type: ignore
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
+            job.model_args.model_name_or_path,
+            cache_dir=cache_dir,
+            token=job.data_args.token,
+            trust_remote_code=job.data_args.trust_remote_code,
+        )
+        dataset = prepare_dataset(job, tokenizer, feature_extractor, dataset)
         logger.info(&#34;Finished Preparing Datasets&#34;)
 
+        update_config(job, config, tokenizer)
+
         logger.info(&#34;Downloading pretrained model...&#34;)
-        model = AutoModelForCTC.from_pretrained(
-            job.base_model,
-            cache_dir=cache_dir,
-            ctc_loss_reduction=&#34;mean&#34;,
-            pad_token_id=processor.tokenizer.pad_token_id,
-        )
+        model = create_ctc_model(job, config)
         logger.info(&#34;Downloaded model.&#34;)
 
-        if job.options.freeze_feature_extractor:
-            model.freeze_feature_extractor()
+        # Now save everything to be able to create a single processor later
+        # make sure all processes wait until data is saved
+        logger.info(&#34;Saving config, tokenizer and feature extractor.&#34;)
+        with job.training_args.main_process_first():
+            # only the main process saves them
+            if is_main_process(job.training_args.local_rank):
+                feature_extractor.save_pretrained(output_dir)
+                tokenizer.save_pretrained(output_dir)  # type: ignore
+                config.save_pretrained(output_dir)  # type: ignore
 
-        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        output_dir.mkdir(exist_ok=True, parents=True)
+        try:
+            processor = AutoProcessor.from_pretrained(output_dir)
+        except (OSError, KeyError):
+            warnings.warn(
+                &#34;Loading a processor from a feature extractor config that does not&#34;
+                &#34; include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following &#34;
+                &#34; attribute to your `preprocessor_config.json` file to suppress this warning: &#34;
+                &#34; `&#39;processor_class&#39;: &#39;Wav2Vec2Processor&#39;`&#34;,
+                FutureWarning,
+            )
+            processor = Wav2Vec2Processor.from_pretrained(output_dir)
 
+        data_collator = DataCollatorCTCWithPadding(processor=processor)  # type: ignore
+
+        # Initialize Trainer
         trainer = Trainer(
-            model=model,
-            args=job.to_training_args(output_dir),
-            train_dataset=dataset[&#34;train&#34;],  # type: ignore
-            eval_dataset=dataset[&#34;test&#34;],  # type: ignore
-            tokenizer=processor.feature_extractor,
+            model=model,  # type: ignore
             data_collator=data_collator,
-            compute_metrics=create_metrics(job.metrics, processor),
+            args=job.training_args,
+            compute_metrics=create_metrics(job.data_args.eval_metrics, processor),
+            train_dataset=dataset[&#34;train&#34;] if job.training_args.do_train else None,  # type: ignore
+            eval_dataset=dataset[&#34;eval&#34;] if job.training_args.do_eval else None,  # type: ignore
+            tokenizer=processor,  # type: ignore
         )
 
         logger.info(f&#34;Begin training model...&#34;)
-        trainer.train()
+        train(job, trainer, dataset)
         logger.info(f&#34;Finished training!&#34;)
 
-        logger.info(f&#34;Saving model @ {output_dir}&#34;)
-        trainer.save_model()
-        trainer.save_state()
-        processor.save_pretrained(output_dir)
-        logger.info(f&#34;Model written to disk.&#34;)
+        evaluate(job, trainer, dataset)
+        clean_up(job, trainer)
 
-        metrics = trainer.evaluate()
-        logger.info(&#34;==== Metrics ====&#34;)
-        trainer.log_metrics(&#34;eval&#34;, metrics)
-        trainer.save_metrics(&#34;eval&#34;, metrics)
-        logger.info(metrics)
+        return Path(output_dir)</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.train"><code class="name flex">
+<span>def <span class="ident">train</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, trainer: transformers.trainer.Trainer, dataset: datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def train(job: Job, trainer: Trainer, dataset: DatasetDict | IterableDatasetDict):
+    if not job.training_args.do_train:
+        logger.info(&#34;Skipping training: `job.training_args.do_train` is false.&#34;)
+        return
 
-        return output_dir</code></pre>
+    checkpoint = last_checkpoint(job)
+    if checkpoint is None and Path(job.model_args.model_name_or_path).is_dir():
+        checkpoint = job.model_args.model_name_or_path
+
+    train_result = trainer.train(resume_from_checkpoint=checkpoint)
+    trainer.save_model()
+
+    metrics = train_result.metrics
+
+    # Add training samples to metrics
+    max_train_samples = (
+        job.data_args.max_train_samples
+        if job.data_args.max_train_samples is not None
+        else len(dataset[&#34;train&#34;])
+    )
+    metrics[&#34;train_samples&#34;] = min(max_train_samples, len(dataset[&#34;train&#34;]))
+
+    trainer.log_metrics(&#34;train&#34;, metrics)
+    trainer.save_metrics(&#34;train&#34;, metrics)
+    trainer.save_model()
+    trainer.save_state()</code></pre>
+</details>
+</dd>
+<dt id="elpis.trainer.trainer.update_config"><code class="name flex">
+<span>def <span class="ident">update_config</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, config: transformers.models.auto.configuration_auto.AutoConfig, tokenizer: transformers.models.auto.tokenization_auto.AutoTokenizer) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def update_config(job: Job, config: AutoConfig, tokenizer: AutoTokenizer) -&gt; None:
+    config.update(  # type: ignore
+        {
+            &#34;feat_proj_dropout&#34;: job.model_args.feat_proj_dropout,
+            &#34;attention_dropout&#34;: job.model_args.attention_dropout,
+            &#34;hidden_dropout&#34;: job.model_args.hidden_dropout,
+            &#34;final_dropout&#34;: job.model_args.final_dropout,
+            &#34;mask_time_prob&#34;: job.model_args.mask_time_prob,
+            &#34;mask_time_length&#34;: job.model_args.mask_time_length,
+            &#34;mask_feature_prob&#34;: job.model_args.mask_feature_prob,
+            &#34;mask_feature_length&#34;: job.model_args.mask_feature_length,
+            &#34;gradient_checkpointing&#34;: job.training_args.gradient_checkpointing,
+            &#34;layerdrop&#34;: job.model_args.layerdrop,
+            &#34;ctc_loss_reduction&#34;: job.model_args.ctc_loss_reduction,
+            &#34;ctc_zero_infinity&#34;: job.model_args.ctc_zero_infinity,
+            &#34;pad_token_id&#34;: tokenizer.pad_token_id,  # type: ignore
+            &#34;bos_token_id&#34;: tokenizer.bos_token_id,  # type: ignore
+            &#34;eos_token_id&#34;: tokenizer.eos_token_id,  # type: ignore
+            &#34;vocab_size&#34;: len(tokenizer),  # type: ignore
+            &#34;activation_dropout&#34;: job.model_args.activation_dropout,
+        }
+    )</code></pre>
 </details>
 </dd>
 </dl>
@@ -226,8 +877,17 @@ log_file: An optional file to write training logs to.</p>
 </ul>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
-<ul class="">
+<ul class="two-column">
+<li><code><a title="elpis.trainer.trainer.clean_up" href="#elpis.trainer.trainer.clean_up">clean_up</a></code></li>
+<li><code><a title="elpis.trainer.trainer.create_config" href="#elpis.trainer.trainer.create_config">create_config</a></code></li>
+<li><code><a title="elpis.trainer.trainer.create_ctc_model" href="#elpis.trainer.trainer.create_ctc_model">create_ctc_model</a></code></li>
+<li><code><a title="elpis.trainer.trainer.create_tokenizer" href="#elpis.trainer.trainer.create_tokenizer">create_tokenizer</a></code></li>
+<li><code><a title="elpis.trainer.trainer.create_vocab" href="#elpis.trainer.trainer.create_vocab">create_vocab</a></code></li>
+<li><code><a title="elpis.trainer.trainer.evaluate" href="#elpis.trainer.trainer.evaluate">evaluate</a></code></li>
+<li><code><a title="elpis.trainer.trainer.last_checkpoint" href="#elpis.trainer.trainer.last_checkpoint">last_checkpoint</a></code></li>
+<li><code><a title="elpis.trainer.trainer.run_job" href="#elpis.trainer.trainer.run_job">run_job</a></code></li>
 <li><code><a title="elpis.trainer.trainer.train" href="#elpis.trainer.trainer.train">train</a></code></li>
+<li><code><a title="elpis.trainer.trainer.update_config" href="#elpis.trainer.trainer.update_config">update_config</a></code></li>
 </ul>
 </li>
 </ul>

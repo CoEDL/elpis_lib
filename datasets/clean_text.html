@@ -33,31 +33,37 @@ from typing import List, Optional
 def clean_text(
     text: str,
     words_to_remove: Optional[List[str]] = None,
-    punctuation_to_explode: str = &#34;&#34;,
-    punctuation_to_remove: str = &#34;&#34;,
+    characters_to_explode: str = &#34;&#34;,
+    characters_to_remove: str = &#34;&#34;,
+    to_lower=True,
 ) -&gt; str:
     &#34;&#34;&#34;Cleans the text based on the supplied options.
 
     Parameters:
         text: The text to clean.
-        options: The cleaning options.
+        words_to_remove: Words to remove from the text.
+        characters_to_remove: A string of chars to remove from the text.
+        characters_to_explode: A string of chars to replace with spaces in the text.
+        to_lower: True iff the resulting text should be converted to lower case.
+            Converts to uppercase if False.
 
     Returns:
         The cleaned text
     &#34;&#34;&#34;
-    words = text.lower().split()
+    words = text.split()
 
     if words_to_remove is not None:
         words = filter(lambda word: word not in words_to_remove, words)
 
-    if punctuation_to_explode != &#34;&#34;:
-        words = map(lambda word: explode(word, punctuation_to_explode), words)
+    if characters_to_explode != &#34;&#34;:
+        words = map(lambda word: explode(word, characters_to_explode), words)
 
-    if punctuation_to_remove != &#34;&#34;:
-        words = map(lambda word: collapse(word, punctuation_to_remove), words)
+    if characters_to_remove != &#34;&#34;:
+        words = map(lambda word: collapse(word, characters_to_remove), words)
 
     result = &#34; &#34;.join(words).strip()
-    return remove_consecutive_spaces(result)
+    result = remove_consecutive_spaces(result)
+    return result.lower() if to_lower else result.upper()
 
 
 def explode(text: str, pattern: str) -&gt; str:
@@ -108,13 +114,17 @@ def remove_consecutive_spaces(text: str) -&gt; str:
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="elpis.datasets.clean_text.clean_text"><code class="name flex">
-<span>def <span class="ident">clean_text</span></span>(<span>text: str, words_to_remove: Optional[List[str]] = None, punctuation_to_explode: str = '', punctuation_to_remove: str = '') ‑> str</span>
+<span>def <span class="ident">clean_text</span></span>(<span>text: str, words_to_remove: Optional[List[str]] = None, characters_to_explode: str = '', characters_to_remove: str = '', to_lower=True) ‑> str</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Cleans the text based on the supplied options.</p>
 <h2 id="parameters">Parameters</h2>
 <p>text: The text to clean.
-options: The cleaning options.</p>
+words_to_remove: Words to remove from the text.
+characters_to_remove: A string of chars to remove from the text.
+characters_to_explode: A string of chars to replace with spaces in the text.
+to_lower: True iff the resulting text should be converted to lower case.
+Converts to uppercase if False.</p>
 <h2 id="returns">Returns</h2>
 <p>The cleaned text</p></div>
 <details class="source">
@@ -124,31 +134,37 @@ options: The cleaning options.</p>
 <pre><code class="python">def clean_text(
     text: str,
     words_to_remove: Optional[List[str]] = None,
-    punctuation_to_explode: str = &#34;&#34;,
-    punctuation_to_remove: str = &#34;&#34;,
+    characters_to_explode: str = &#34;&#34;,
+    characters_to_remove: str = &#34;&#34;,
+    to_lower=True,
 ) -&gt; str:
     &#34;&#34;&#34;Cleans the text based on the supplied options.
 
     Parameters:
         text: The text to clean.
-        options: The cleaning options.
+        words_to_remove: Words to remove from the text.
+        characters_to_remove: A string of chars to remove from the text.
+        characters_to_explode: A string of chars to replace with spaces in the text.
+        to_lower: True iff the resulting text should be converted to lower case.
+            Converts to uppercase if False.
 
     Returns:
         The cleaned text
     &#34;&#34;&#34;
-    words = text.lower().split()
+    words = text.split()
 
     if words_to_remove is not None:
         words = filter(lambda word: word not in words_to_remove, words)
 
-    if punctuation_to_explode != &#34;&#34;:
-        words = map(lambda word: explode(word, punctuation_to_explode), words)
+    if characters_to_explode != &#34;&#34;:
+        words = map(lambda word: explode(word, characters_to_explode), words)
 
-    if punctuation_to_remove != &#34;&#34;:
-        words = map(lambda word: collapse(word, punctuation_to_remove), words)
+    if characters_to_remove != &#34;&#34;:
+        words = map(lambda word: collapse(word, characters_to_remove), words)
 
     result = &#34; &#34;.join(words).strip()
-    return remove_consecutive_spaces(result)</code></pre>
+    result = remove_consecutive_spaces(result)
+    return result.lower() if to_lower else result.upper()</code></pre>
 </details>
 </dd>
 <dt id="elpis.datasets.clean_text.collapse"><code class="name flex">

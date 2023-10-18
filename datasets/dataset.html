@@ -29,8 +29,10 @@
 <pre><code class="python">from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
+from functools import cached_property, reduce
+from itertools import chain, groupby
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from elpis.models import ElanOptions
 
@@ -97,6 +99,9 @@ class Dataset:
     cleaning_options: CleaningOptions
     elan_options: Optional[ElanOptions]
 
+    def __post_init__(self):
+        self.files = sorted(self.files)
+
     def is_empty(self) -&gt; bool:
         &#34;&#34;&#34;Returns true iff the dataset contains no files.&#34;&#34;&#34;
         return len(self.files) == 0
@@ -110,15 +115,29 @@ class Dataset:
         return (
             not self.is_empty()
             and len(self.files) % 2 == 0
-            and len(self.mismatched_files()) == 0
-            and len(self.colliding_files()) == 0
+            and len(self.mismatched_files) == 0
+            and len(self.colliding_files) == 0
         )
+
+    @staticmethod
+    def is_audio(file: Path) -&gt; bool:
+        return file.suffix == &#34;.wav&#34;
+
+    @staticmethod
+    def is_transcript(file: Path) -&gt; bool:
+        return file.suffix in TRANSCRIPTION_EXTENSIONS
 
     @staticmethod
     def corresponding_audio_name(transcript_file: Path) -&gt; Path:
         &#34;&#34;&#34;Gets the corresponding audio file name for a given transcript file.&#34;&#34;&#34;
         return Path(transcript_file).parent / (transcript_file.stem + &#34;.wav&#34;)
 
+    @property
+    def transcript_files(self) -&gt; Iterable[Path]:
+        &#34;&#34;&#34;Returns an iterable of all transcription files within the dataset.&#34;&#34;&#34;
+        return filter(Dataset.is_transcript, self.files)
+
+    @cached_property
     def mismatched_files(self) -&gt; Set[Path]:
         &#34;&#34;&#34;Returns the list of transcript files with no corresponding
         audio and vice versa.
@@ -129,18 +148,19 @@ class Dataset:
         Returns:
             A list of the mismatched file names.
         &#34;&#34;&#34;
-        transcripts_with_audio = set(
-            filter(
-                lambda file: Dataset.corresponding_audio_name(file) in self.files,
-                self._transcript_files(),
-            )
-        )
-        matched_files = transcripts_with_audio | set(
-            Dataset.corresponding_audio_name(file) for file in transcripts_with_audio
-        )
+        grouped_by_stems = groupby(self.files, lambda path: path.stem)
 
-        return set(self.files).difference(matched_files)
+        def mismatches(files: Iterable[Path]) -&gt; list[Path]:
+            files = list(files)
+            has_audio = any(Dataset.is_audio(file) for file in files)
+            has_transcript = any(Dataset.is_transcript(file) for file in files)
+            return [] if has_transcript == has_audio else files
 
+        groups = (mismatches(g) for _, g in grouped_by_stems)
+        result = set(chain.from_iterable(groups))
+        return result
+
+    @cached_property
     def colliding_files(self) -&gt; Set[Path]:
         &#34;&#34;&#34;Returns the list of transcript file names that collide.
 
@@ -150,19 +170,14 @@ class Dataset:
         Returns:
             A list of the colliding file names.
         &#34;&#34;&#34;
+        grouped_by_stems = groupby(self.transcript_files, lambda path: path.stem)
 
-        def would_collide(transcript_file: Path) -&gt; bool:
-            other_files = self._transcript_files().difference({transcript_file})
-            other_file_names = map(lambda file: Path(file).stem, other_files)
-            return Path(transcript_file).stem in other_file_names
+        def collisions(files: Iterable[Path]) -&gt; list[Path]:
+            files = list(files)
+            return files if len(files) &gt;= 2 else []
 
-        return set(filter(would_collide, self._transcript_files()))
-
-    def _transcript_files(self) -&gt; Set[Path]:
-        &#34;&#34;&#34;Returns a set of all transcription files within the dataset.&#34;&#34;&#34;
-        return set(
-            filter(lambda file: file.suffix in TRANSCRIPTION_EXTENSIONS, self.files)
-        )
+        collision_groups = (collisions(g) for _, g in grouped_by_stems)
+        return set(chain.from_iterable(collision_groups))
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -&gt; Dataset:
@@ -181,19 +196,26 @@ class Dataset:
             elan_options=elan_options,
         )
 
-    def to_batches(self) -&gt; List[ProcessingBatch]:
+    @property
+    def valid_transcriptions(self):
+        is_valid = lambda path: path not in (
+            self.mismatched_files | self.colliding_files
+        )
+        return filter(is_valid, self.transcript_files)
+
+    def to_batches(self) -&gt; Iterable[ProcessingBatch]:
         &#34;&#34;&#34;Converts a valid dataset to a list of processing jobs, matching
         transcript and audio files.
         &#34;&#34;&#34;
-        return [
+        return (
             ProcessingBatch(
                 transcription_file=transcription_file,
                 audio_file=self.corresponding_audio_name(transcription_file),
                 cleaning_options=self.cleaning_options,
                 elan_options=self.elan_options,
             )
-            for transcription_file in self._transcript_files()
-        ]
+            for transcription_file in self.valid_transcriptions
+        )
 
     def to_dict(self) -&gt; Dict[str, Any]:
         result = {
@@ -312,6 +334,9 @@ class Dataset:
     cleaning_options: CleaningOptions
     elan_options: Optional[ElanOptions]
 
+    def __post_init__(self):
+        self.files = sorted(self.files)
+
     def is_empty(self) -&gt; bool:
         &#34;&#34;&#34;Returns true iff the dataset contains no files.&#34;&#34;&#34;
         return len(self.files) == 0
@@ -325,15 +350,29 @@ class Dataset:
         return (
             not self.is_empty()
             and len(self.files) % 2 == 0
-            and len(self.mismatched_files()) == 0
-            and len(self.colliding_files()) == 0
+            and len(self.mismatched_files) == 0
+            and len(self.colliding_files) == 0
         )
+
+    @staticmethod
+    def is_audio(file: Path) -&gt; bool:
+        return file.suffix == &#34;.wav&#34;
+
+    @staticmethod
+    def is_transcript(file: Path) -&gt; bool:
+        return file.suffix in TRANSCRIPTION_EXTENSIONS
 
     @staticmethod
     def corresponding_audio_name(transcript_file: Path) -&gt; Path:
         &#34;&#34;&#34;Gets the corresponding audio file name for a given transcript file.&#34;&#34;&#34;
         return Path(transcript_file).parent / (transcript_file.stem + &#34;.wav&#34;)
 
+    @property
+    def transcript_files(self) -&gt; Iterable[Path]:
+        &#34;&#34;&#34;Returns an iterable of all transcription files within the dataset.&#34;&#34;&#34;
+        return filter(Dataset.is_transcript, self.files)
+
+    @cached_property
     def mismatched_files(self) -&gt; Set[Path]:
         &#34;&#34;&#34;Returns the list of transcript files with no corresponding
         audio and vice versa.
@@ -344,18 +383,19 @@ class Dataset:
         Returns:
             A list of the mismatched file names.
         &#34;&#34;&#34;
-        transcripts_with_audio = set(
-            filter(
-                lambda file: Dataset.corresponding_audio_name(file) in self.files,
-                self._transcript_files(),
-            )
-        )
-        matched_files = transcripts_with_audio | set(
-            Dataset.corresponding_audio_name(file) for file in transcripts_with_audio
-        )
+        grouped_by_stems = groupby(self.files, lambda path: path.stem)
 
-        return set(self.files).difference(matched_files)
+        def mismatches(files: Iterable[Path]) -&gt; list[Path]:
+            files = list(files)
+            has_audio = any(Dataset.is_audio(file) for file in files)
+            has_transcript = any(Dataset.is_transcript(file) for file in files)
+            return [] if has_transcript == has_audio else files
 
+        groups = (mismatches(g) for _, g in grouped_by_stems)
+        result = set(chain.from_iterable(groups))
+        return result
+
+    @cached_property
     def colliding_files(self) -&gt; Set[Path]:
         &#34;&#34;&#34;Returns the list of transcript file names that collide.
 
@@ -365,19 +405,14 @@ class Dataset:
         Returns:
             A list of the colliding file names.
         &#34;&#34;&#34;
+        grouped_by_stems = groupby(self.transcript_files, lambda path: path.stem)
 
-        def would_collide(transcript_file: Path) -&gt; bool:
-            other_files = self._transcript_files().difference({transcript_file})
-            other_file_names = map(lambda file: Path(file).stem, other_files)
-            return Path(transcript_file).stem in other_file_names
+        def collisions(files: Iterable[Path]) -&gt; list[Path]:
+            files = list(files)
+            return files if len(files) &gt;= 2 else []
 
-        return set(filter(would_collide, self._transcript_files()))
-
-    def _transcript_files(self) -&gt; Set[Path]:
-        &#34;&#34;&#34;Returns a set of all transcription files within the dataset.&#34;&#34;&#34;
-        return set(
-            filter(lambda file: file.suffix in TRANSCRIPTION_EXTENSIONS, self.files)
-        )
+        collision_groups = (collisions(g) for _, g in grouped_by_stems)
+        return set(chain.from_iterable(collision_groups))
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -&gt; Dataset:
@@ -396,19 +431,26 @@ class Dataset:
             elan_options=elan_options,
         )
 
-    def to_batches(self) -&gt; List[ProcessingBatch]:
+    @property
+    def valid_transcriptions(self):
+        is_valid = lambda path: path not in (
+            self.mismatched_files | self.colliding_files
+        )
+        return filter(is_valid, self.transcript_files)
+
+    def to_batches(self) -&gt; Iterable[ProcessingBatch]:
         &#34;&#34;&#34;Converts a valid dataset to a list of processing jobs, matching
         transcript and audio files.
         &#34;&#34;&#34;
-        return [
+        return (
             ProcessingBatch(
                 transcription_file=transcription_file,
                 audio_file=self.corresponding_audio_name(transcription_file),
                 cleaning_options=self.cleaning_options,
                 elan_options=self.elan_options,
             )
-            for transcription_file in self._transcript_files()
-        ]
+            for transcription_file in self.valid_transcriptions
+        )
 
     def to_dict(self) -&gt; Dict[str, Any]:
         result = {
@@ -485,12 +527,38 @@ def from_dict(cls, data: Dict[str, Any]) -&gt; Dataset:
     )</code></pre>
 </details>
 </dd>
-</dl>
-<h3>Methods</h3>
-<dl>
-<dt id="elpis.datasets.dataset.Dataset.colliding_files"><code class="name flex">
-<span>def <span class="ident">colliding_files</span></span>(<span>self) ‑> Set[pathlib.Path]</span>
+<dt id="elpis.datasets.dataset.Dataset.is_audio"><code class="name flex">
+<span>def <span class="ident">is_audio</span></span>(<span>file: Path) ‑> bool</span>
 </code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def is_audio(file: Path) -&gt; bool:
+    return file.suffix == &#34;.wav&#34;</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.dataset.Dataset.is_transcript"><code class="name flex">
+<span>def <span class="ident">is_transcript</span></span>(<span>file: Path) ‑> bool</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def is_transcript(file: Path) -&gt; bool:
+    return file.suffix in TRANSCRIPTION_EXTENSIONS</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Instance variables</h3>
+<dl>
+<dt id="elpis.datasets.dataset.Dataset.colliding_files"><code class="name">var <span class="ident">colliding_files</span></code></dt>
 <dd>
 <div class="desc"><p>Returns the list of transcript file names that collide.</p>
 <p>Collide means that two transcript files would be for the same .wav
@@ -501,24 +569,113 @@ file.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def colliding_files(self) -&gt; Set[Path]:
-    &#34;&#34;&#34;Returns the list of transcript file names that collide.
-
-    Collide means that two transcript files would be for the same .wav
-    file.
-
-    Returns:
-        A list of the colliding file names.
-    &#34;&#34;&#34;
-
-    def would_collide(transcript_file: Path) -&gt; bool:
-        other_files = self._transcript_files().difference({transcript_file})
-        other_file_names = map(lambda file: Path(file).stem, other_files)
-        return Path(transcript_file).stem in other_file_names
-
-    return set(filter(would_collide, self._transcript_files()))</code></pre>
+<pre><code class="python">def __get__(self, instance, owner=None):
+    if instance is None:
+        return self
+    if self.attrname is None:
+        raise TypeError(
+            &#34;Cannot use cached_property instance without calling __set_name__ on it.&#34;)
+    try:
+        cache = instance.__dict__
+    except AttributeError:  # not all objects have __dict__ (e.g. class defines slots)
+        msg = (
+            f&#34;No &#39;__dict__&#39; attribute on {type(instance).__name__!r} &#34;
+            f&#34;instance to cache {self.attrname!r} property.&#34;
+        )
+        raise TypeError(msg) from None
+    val = cache.get(self.attrname, _NOT_FOUND)
+    if val is _NOT_FOUND:
+        with self.lock:
+            # check if another thread filled cache while we awaited lock
+            val = cache.get(self.attrname, _NOT_FOUND)
+            if val is _NOT_FOUND:
+                val = self.func(instance)
+                try:
+                    cache[self.attrname] = val
+                except TypeError:
+                    msg = (
+                        f&#34;The &#39;__dict__&#39; attribute on {type(instance).__name__!r} instance &#34;
+                        f&#34;does not support item assignment for caching {self.attrname!r} property.&#34;
+                    )
+                    raise TypeError(msg) from None
+    return val</code></pre>
 </details>
 </dd>
+<dt id="elpis.datasets.dataset.Dataset.mismatched_files"><code class="name">var <span class="ident">mismatched_files</span></code></dt>
+<dd>
+<div class="desc"><p>Returns the list of transcript files with no corresponding
+audio and vice versa.</p>
+<p>Corresponding in this case means that for every transcript file with
+name x.some_extension, there is a corresponding file x.wav in the dataset.</p>
+<h2 id="returns">Returns</h2>
+<p>A list of the mismatched file names.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def __get__(self, instance, owner=None):
+    if instance is None:
+        return self
+    if self.attrname is None:
+        raise TypeError(
+            &#34;Cannot use cached_property instance without calling __set_name__ on it.&#34;)
+    try:
+        cache = instance.__dict__
+    except AttributeError:  # not all objects have __dict__ (e.g. class defines slots)
+        msg = (
+            f&#34;No &#39;__dict__&#39; attribute on {type(instance).__name__!r} &#34;
+            f&#34;instance to cache {self.attrname!r} property.&#34;
+        )
+        raise TypeError(msg) from None
+    val = cache.get(self.attrname, _NOT_FOUND)
+    if val is _NOT_FOUND:
+        with self.lock:
+            # check if another thread filled cache while we awaited lock
+            val = cache.get(self.attrname, _NOT_FOUND)
+            if val is _NOT_FOUND:
+                val = self.func(instance)
+                try:
+                    cache[self.attrname] = val
+                except TypeError:
+                    msg = (
+                        f&#34;The &#39;__dict__&#39; attribute on {type(instance).__name__!r} instance &#34;
+                        f&#34;does not support item assignment for caching {self.attrname!r} property.&#34;
+                    )
+                    raise TypeError(msg) from None
+    return val</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.dataset.Dataset.transcript_files"><code class="name">var <span class="ident">transcript_files</span> : Iterable[pathlib.Path]</code></dt>
+<dd>
+<div class="desc"><p>Returns an iterable of all transcription files within the dataset.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@property
+def transcript_files(self) -&gt; Iterable[Path]:
+    &#34;&#34;&#34;Returns an iterable of all transcription files within the dataset.&#34;&#34;&#34;
+    return filter(Dataset.is_transcript, self.files)</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.dataset.Dataset.valid_transcriptions"><code class="name">var <span class="ident">valid_transcriptions</span></code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@property
+def valid_transcriptions(self):
+    is_valid = lambda path: path not in (
+        self.mismatched_files | self.colliding_files
+    )
+    return filter(is_valid, self.transcript_files)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
 <dt id="elpis.datasets.dataset.Dataset.has_elan"><code class="name flex">
 <span>def <span class="ident">has_elan</span></span>(<span>self) ‑> bool</span>
 </code></dt>
@@ -561,50 +718,13 @@ file.</p>
     return (
         not self.is_empty()
         and len(self.files) % 2 == 0
-        and len(self.mismatched_files()) == 0
-        and len(self.colliding_files()) == 0
+        and len(self.mismatched_files) == 0
+        and len(self.colliding_files) == 0
     )</code></pre>
 </details>
 </dd>
-<dt id="elpis.datasets.dataset.Dataset.mismatched_files"><code class="name flex">
-<span>def <span class="ident">mismatched_files</span></span>(<span>self) ‑> Set[pathlib.Path]</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Returns the list of transcript files with no corresponding
-audio and vice versa.</p>
-<p>Corresponding in this case means that for every transcript file with
-name x.some_extension, there is a corresponding file x.wav in the dataset.</p>
-<h2 id="returns">Returns</h2>
-<p>A list of the mismatched file names.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def mismatched_files(self) -&gt; Set[Path]:
-    &#34;&#34;&#34;Returns the list of transcript files with no corresponding
-    audio and vice versa.
-
-    Corresponding in this case means that for every transcript file with
-    name x.some_extension, there is a corresponding file x.wav in the dataset.
-
-    Returns:
-        A list of the mismatched file names.
-    &#34;&#34;&#34;
-    transcripts_with_audio = set(
-        filter(
-            lambda file: Dataset.corresponding_audio_name(file) in self.files,
-            self._transcript_files(),
-        )
-    )
-    matched_files = transcripts_with_audio | set(
-        Dataset.corresponding_audio_name(file) for file in transcripts_with_audio
-    )
-
-    return set(self.files).difference(matched_files)</code></pre>
-</details>
-</dd>
 <dt id="elpis.datasets.dataset.Dataset.to_batches"><code class="name flex">
-<span>def <span class="ident">to_batches</span></span>(<span>self) ‑> List[<a title="elpis.datasets.dataset.ProcessingBatch" href="#elpis.datasets.dataset.ProcessingBatch">ProcessingBatch</a>]</span>
+<span>def <span class="ident">to_batches</span></span>(<span>self) ‑> Iterable[<a title="elpis.datasets.dataset.ProcessingBatch" href="#elpis.datasets.dataset.ProcessingBatch">ProcessingBatch</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Converts a valid dataset to a list of processing jobs, matching
@@ -613,19 +733,19 @@ transcript and audio files.</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def to_batches(self) -&gt; List[ProcessingBatch]:
+<pre><code class="python">def to_batches(self) -&gt; Iterable[ProcessingBatch]:
     &#34;&#34;&#34;Converts a valid dataset to a list of processing jobs, matching
     transcript and audio files.
     &#34;&#34;&#34;
-    return [
+    return (
         ProcessingBatch(
             transcription_file=transcription_file,
             audio_file=self.corresponding_audio_name(transcription_file),
             cleaning_options=self.cleaning_options,
             elan_options=self.elan_options,
         )
-        for transcription_file in self._transcript_files()
-    ]</code></pre>
+        for transcription_file in self.valid_transcriptions
+    )</code></pre>
 </details>
 </dd>
 <dt id="elpis.datasets.dataset.Dataset.to_dict"><code class="name flex">
@@ -801,12 +921,16 @@ def from_dict(cls, data: Dict[str, Any]) -&gt; ProcessingBatch:
 <li><code><a title="elpis.datasets.dataset.Dataset.files" href="#elpis.datasets.dataset.Dataset.files">files</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.from_dict" href="#elpis.datasets.dataset.Dataset.from_dict">from_dict</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.has_elan" href="#elpis.datasets.dataset.Dataset.has_elan">has_elan</a></code></li>
+<li><code><a title="elpis.datasets.dataset.Dataset.is_audio" href="#elpis.datasets.dataset.Dataset.is_audio">is_audio</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.is_empty" href="#elpis.datasets.dataset.Dataset.is_empty">is_empty</a></code></li>
+<li><code><a title="elpis.datasets.dataset.Dataset.is_transcript" href="#elpis.datasets.dataset.Dataset.is_transcript">is_transcript</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.is_valid" href="#elpis.datasets.dataset.Dataset.is_valid">is_valid</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.mismatched_files" href="#elpis.datasets.dataset.Dataset.mismatched_files">mismatched_files</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.name" href="#elpis.datasets.dataset.Dataset.name">name</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.to_batches" href="#elpis.datasets.dataset.Dataset.to_batches">to_batches</a></code></li>
 <li><code><a title="elpis.datasets.dataset.Dataset.to_dict" href="#elpis.datasets.dataset.Dataset.to_dict">to_dict</a></code></li>
+<li><code><a title="elpis.datasets.dataset.Dataset.transcript_files" href="#elpis.datasets.dataset.Dataset.transcript_files">transcript_files</a></code></li>
+<li><code><a title="elpis.datasets.dataset.Dataset.valid_transcriptions" href="#elpis.datasets.dataset.Dataset.valid_transcriptions">valid_transcriptions</a></code></li>
 </ul>
 </li>
 <li>

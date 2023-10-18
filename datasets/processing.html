@@ -27,98 +27,254 @@
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">import os
-from itertools import chain
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from datasets import Audio, DatasetDict, load_dataset
+from datasets import (
+    Audio,
+    Dataset,
+    DatasetDict,
+    IterableDataset,
+    IterableDatasetDict,
+    load_dataset,
+)
 from loguru import logger
-from transformers import Wav2Vec2Processor
+from transformers import AutoFeatureExtractor, AutoTokenizer
 
-PROCESSOR_COUNT = 4
-AUDIO_COLUMN = &#34;audio&#34;
-SAMPLING_RATE = 16_000
+from elpis.datasets.clean_text import clean_text
+from elpis.models.job import Job
+
+LOGGING_TRANSCRIPT_SAMPLE = 2
 
 
-def create_dataset(
-    dataset_path: Path, cache_dir: Optional[Path] = None, test_size: float = 0.2
+def create_dataset(job: Job) -&gt; DatasetDict | IterableDatasetDict:
+    if Path(job.data_args.dataset_name_or_path).is_dir():
+        return create_local_dataset(job)
+
+    return create_hf_dataset(job)
+
+
+def create_local_dataset(
+    job: Job,
+    test_size: float = 0.2,
 ) -&gt; DatasetDict:
     &#34;&#34;&#34;Creates a dataset with test/train splits from the data within a given
     directory.
 
     Parameters:
-        dataset_path: The path to the unprocessed dataset files.
-        cache_dir: The path to save the processed dataset.
+        job: The training job to run.
         test_size: The percentage of the dataset to allocate as the test set.
 
     Returns:
         A dataset dictionary with test and train splits.
     &#34;&#34;&#34;
+    dataset_path = Path(job.data_args.dataset_name_or_path)
+    if not dataset_path.is_dir():
+        raise ValueError(
+            f&#34;Attempting to create local dataset from non-existent &#34;
+            f&#34;directory: {dataset_path}.&#34;
+        )
 
     transcript_files = [
         str(dataset_path / file)
         for file in os.listdir(dataset_path)
         if (dataset_path / file).suffix == &#34;.json&#34;
     ]
-    # Annoying hack
-    if cache_dir is not None:
-        cache_dir = str(cache_dir)  # type: ignore
+    logger.debug(
+        f&#34;Transcript file paths sample: {transcript_files[:LOGGING_TRANSCRIPT_SAMPLE]}&#34;
+    )
 
-    dataset = load_dataset(&#34;json&#34;, data_files=transcript_files, cache_dir=cache_dir)  # type: ignore
+    dataset = load_dataset(&#34;json&#34;, data_files=transcript_files, cache_dir=job.model_args.cache_dir)  # type: ignore
 
     # Convert the audio file name column into the matching audio data
-    dataset = dataset.rename_column(&#34;audio_file&#34;, AUDIO_COLUMN)
+    audio_column = job.data_args.audio_column_name
+    dataset = dataset.rename_column(&#34;audio_file&#34;, audio_column)
+    logger.debug(f&#34;Dataset audio file paths sample: {dataset[&#39;train&#39;][audio_column][:LOGGING_TRANSCRIPT_SAMPLE]}&#34;)  # type: ignore
 
     def resolve_audio_path(row: Dict[str, Any]) -&gt; Dict[str, Any]:
-        row[AUDIO_COLUMN] = str(dataset_path / row[AUDIO_COLUMN])
+        # Forcefully resolve to same dir as dataset.
+        path = dataset_path / Path(row[audio_column]).name
+        row[audio_column] = str(path.absolute())
         return row
 
     dataset = dataset.map(resolve_audio_path)
-    dataset = dataset.cast_column(AUDIO_COLUMN, Audio(sampling_rate=SAMPLING_RATE))
+    logger.debug(f&#34;Dataset audio file paths post-resolution: {dataset[&#39;train&#39;][audio_column][:LOGGING_TRANSCRIPT_SAMPLE]}&#34;)  # type: ignore
 
-    return dataset[&#34;train&#34;].train_test_split(test_size=test_size)  # type: ignore
+    dataset = dataset[&#34;train&#34;].train_test_split(test_size=test_size, seed=job.training_args.seed)  # type: ignore
+    # rename test to eval
+    dataset[&#34;eval&#34;] = dataset[&#34;test&#34;]
+    dataset.pop(&#34;test&#34;)
+
+    return dataset
 
 
-def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -&gt; DatasetDict:
+def create_hf_dataset(job: Job) -&gt; DatasetDict | IterableDatasetDict:
+    data_args = job.data_args
+
+    dataset = DatasetDict()
+    if data_args.stream_dataset:
+        dataset = IterableDatasetDict()
+
+    if job.training_args.do_train:
+        dataset[&#34;train&#34;] = load_dataset(
+            data_args.dataset_name_or_path,
+            data_args.dataset_config_name,
+            streaming=data_args.stream_dataset,
+            split=data_args.train_split_name,
+            token=data_args.token,
+        )
+
+        if data_args.audio_column_name not in dataset[&#34;train&#34;].column_names:
+            raise ValueError(
+                f&#34;audio_column_name &#39;{data_args.audio_column_name}&#39; not found&#34;
+                f&#34; in dataset &#39;{data_args.dataset_name_or_path}&#39;.&#34;
+                &#34; Make sure to set `audio_column_name` to the correct audio column - one of&#34;
+                f&#34; {&#39;, &#39;.join(dataset[&#39;train&#39;].column_names)}.&#34;
+            )
+
+        if data_args.text_column_name not in dataset[&#34;train&#34;].column_names:
+            raise ValueError(
+                f&#34;text_column_name {data_args.text_column_name} not found&#34;
+                f&#34; in dataset &#39;{data_args.dataset_name_or_path}&#39;. &#34;
+                &#34;Make sure to set `text_column_name` to the correct text column - one of &#34;
+                f&#34;{&#39;, &#39;.join(dataset[&#39;train&#39;].column_names)}.&#34;
+            )
+
+    if job.training_args.do_eval:
+        dataset[&#34;eval&#34;] = load_dataset(
+            data_args.dataset_name_or_path,
+            data_args.dataset_config_name,
+            split=data_args.eval_split_name,
+            token=data_args.token,
+            streaming=data_args.stream_dataset,
+        )
+
+    return dataset
+
+
+def prepare_dataset(
+    job: Job,
+    tokenizer: AutoTokenizer,
+    feature_extractor: AutoFeatureExtractor,
+    dataset: DatasetDict | IterableDatasetDict,
+) -&gt; DatasetDict | IterableDatasetDict:
     &#34;&#34;&#34;Runs some preprocessing over the given dataset.
 
-    TODO: I&#39;m going to be honest, I have no idea what this does, and need some
-    smart ML knight in shining armour to write a propert description.
-
     Parameters:
-        dataset: The dataset to apply the preprocessing
+        dataset: The dataset on which to apply the preprocessing
         processor: The processor to apply over the dataset
     &#34;&#34;&#34;
+    dataset = clean_dataset(job, dataset)
+    dataset = constrain_to_max_samples(job, dataset)
 
-    logger.debug(f&#34;Dataset pre prep: {dataset}&#34;)
-    logger.debug(f&#34;Dataset[train] pre prep: {dataset[&#39;train&#39;][&#39;transcript&#39;]}&#34;)
-    logger.debug(f&#34;Tokenizer vocab: {processor.tokenizer.vocab}&#34;)  # type: ignore
+    # Load the audio data and resample if necessary.
+    dataset = dataset.cast_column(
+        job.data_args.audio_column_name,
+        Audio(sampling_rate=feature_extractor.sampling_rate),  # type: ignore
+    )
 
     def _prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
-        # Also from https://huggingface.co/blog/fine-tune-xlsr-wav2vec2
-        audio = batch[&#34;audio&#34;]
-
-        batch[&#34;input_values&#34;] = processor(
+        audio = batch[job.data_args.audio_column_name]
+        inputs = feature_extractor(  # type: ignore
             audio[&#34;array&#34;], sampling_rate=audio[&#34;sampling_rate&#34;]
-        ).input_values[0]
+        )
+
+        batch[&#34;input_values&#34;] = inputs.input_values[0]
         batch[&#34;input_length&#34;] = len(batch[&#34;input_values&#34;])
 
-        batch[&#34;labels&#34;] = processor(text=batch[&#34;transcript&#34;]).input_ids
+        # encode targets
+        additional_kwargs = {}
+        phoneme_language = job.data_args.phoneme_language
+        if phoneme_language is not None:
+            additional_kwargs[&#34;phonemizer_lang&#34;] = phoneme_language
+
+        batch[&#34;labels&#34;] = tokenizer(batch[job.data_args.text_column_name], **additional_kwargs).input_ids  # type: ignore
+        return batch
+
+    max_input_length = (
+        job.data_args.max_duration_in_seconds * feature_extractor.sampling_rate  # type: ignore
+    )
+    min_input_length = (
+        job.data_args.min_duration_in_seconds * feature_extractor.sampling_rate  # type: ignore
+    )
+
+    def is_audio_in_length_range(length: int):
+        return length &gt;= min_input_length and length &lt;= max_input_length
+
+    with job.training_args.main_process_first(desc=&#34;dataset map preprocessing&#34;):
+        worker_count = job.data_args.preprocessing_num_workers
+
+        kwargs = {}
+        if not job.data_args.stream_dataset:
+            kwargs = {
+                &#34;num_proc&#34;: worker_count,
+                &#34;desc&#34;: &#34;Dataset Preprocessing&#34;,
+            }
+
+        dataset = dataset.map(
+            _prepare_dataset,
+            remove_columns=next(iter(dataset.values())).column_names,
+            **kwargs,
+        )
+
+        # filter data that is shorter than min_input_length
+        dataset = dataset.filter(
+            is_audio_in_length_range, input_columns=[&#34;input_length&#34;], **kwargs
+        )
+
+    logger.info(f&#34;Test encoding labels: {dataset[&#39;train&#39;][0][&#39;labels&#39;]}&#34;)
+
+    return dataset
+
+
+def constrain_to_max_samples(
+    job: Job, dataset: DatasetDict | IterableDatasetDict
+) -&gt; DatasetDict | IterableDatasetDict:
+    max_train_samples = job.data_args.max_train_samples
+    max_eval_samples = job.data_args.max_eval_samples
+
+    def take(n: int, dataset: Dataset | IterableDataset) -&gt; Dataset | IterableDataset:
+        if job.data_args.stream_dataset:
+            return dataset.take(n)  # type: ignore
+        return dataset.select(range(n))  # type: ignore
+
+    if job.training_args.do_train and max_train_samples is not None:
+        dataset[&#34;train&#34;] = take(max_train_samples, dataset[&#34;train&#34;])  # type: ignore
+
+    if job.training_args.do_eval and max_eval_samples is not None:
+        dataset[&#34;eval&#34;] = take(max_eval_samples, dataset[&#34;eval&#34;])  # type: ignore
+
+    return dataset
+
+
+def clean_dataset(
+    job: Job, dataset: DatasetDict | IterableDatasetDict
+) -&gt; DatasetDict | IterableDatasetDict:
+    if not job.data_args.do_clean:
+        return dataset
+
+    text_column = job.data_args.text_column_name
+
+    def clean(batch: Dict[str, Any]):
+        characters_to_remove = &#34;&#34;.join(job.data_args.chars_to_remove or [])
+        characters_to_explode = &#34;&#34;.join(job.data_args.chars_to_explode or [])
+
+        batch[text_column] = (
+            clean_text(
+                batch[text_column],
+                words_to_remove=job.data_args.words_to_remove,
+                characters_to_remove=characters_to_remove,
+                characters_to_explode=characters_to_explode,
+                to_lower=job.data_args.do_lower_case or True,
+            )
+            + &#34; &#34;  # Note: not sure why this is necessary, but saw in hf docs.
+        )
 
         return batch
 
-    column_names = [dataset.column_names[key] for key in dataset.column_names.keys()]
-    # flatten
-    columns_to_remove = list(chain.from_iterable(column_names))
+    with job.training_args.main_process_first(desc=&#34;Dataset cleaning.&#34;):
+        dataset = dataset.map(clean)
 
-    dataset = dataset.map(
-        _prepare_dataset,
-        remove_columns=columns_to_remove,
-        num_proc=PROCESSOR_COUNT,
-    )
-
-    logger.debug(f&#34;Dataset post prep: {dataset}&#34;)
-    logger.debug(f&#34;Training labels: {dataset[&#39;train&#39;][&#39;labels&#39;]}&#34;)
     return dataset</code></pre>
 </details>
 </section>
@@ -129,15 +285,152 @@ def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -&gt; Da
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
+<dt id="elpis.datasets.processing.clean_dataset"><code class="name flex">
+<span>def <span class="ident">clean_dataset</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, dataset: datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict) ‑> datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def clean_dataset(
+    job: Job, dataset: DatasetDict | IterableDatasetDict
+) -&gt; DatasetDict | IterableDatasetDict:
+    if not job.data_args.do_clean:
+        return dataset
+
+    text_column = job.data_args.text_column_name
+
+    def clean(batch: Dict[str, Any]):
+        characters_to_remove = &#34;&#34;.join(job.data_args.chars_to_remove or [])
+        characters_to_explode = &#34;&#34;.join(job.data_args.chars_to_explode or [])
+
+        batch[text_column] = (
+            clean_text(
+                batch[text_column],
+                words_to_remove=job.data_args.words_to_remove,
+                characters_to_remove=characters_to_remove,
+                characters_to_explode=characters_to_explode,
+                to_lower=job.data_args.do_lower_case or True,
+            )
+            + &#34; &#34;  # Note: not sure why this is necessary, but saw in hf docs.
+        )
+
+        return batch
+
+    with job.training_args.main_process_first(desc=&#34;Dataset cleaning.&#34;):
+        dataset = dataset.map(clean)
+
+    return dataset</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.processing.constrain_to_max_samples"><code class="name flex">
+<span>def <span class="ident">constrain_to_max_samples</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, dataset: datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict) ‑> datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def constrain_to_max_samples(
+    job: Job, dataset: DatasetDict | IterableDatasetDict
+) -&gt; DatasetDict | IterableDatasetDict:
+    max_train_samples = job.data_args.max_train_samples
+    max_eval_samples = job.data_args.max_eval_samples
+
+    def take(n: int, dataset: Dataset | IterableDataset) -&gt; Dataset | IterableDataset:
+        if job.data_args.stream_dataset:
+            return dataset.take(n)  # type: ignore
+        return dataset.select(range(n))  # type: ignore
+
+    if job.training_args.do_train and max_train_samples is not None:
+        dataset[&#34;train&#34;] = take(max_train_samples, dataset[&#34;train&#34;])  # type: ignore
+
+    if job.training_args.do_eval and max_eval_samples is not None:
+        dataset[&#34;eval&#34;] = take(max_eval_samples, dataset[&#34;eval&#34;])  # type: ignore
+
+    return dataset</code></pre>
+</details>
+</dd>
 <dt id="elpis.datasets.processing.create_dataset"><code class="name flex">
-<span>def <span class="ident">create_dataset</span></span>(<span>dataset_path: pathlib.Path, cache_dir: Optional[pathlib.Path] = None, test_size: float = 0.2) ‑> datasets.dataset_dict.DatasetDict</span>
+<span>def <span class="ident">create_dataset</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>) ‑> datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_dataset(job: Job) -&gt; DatasetDict | IterableDatasetDict:
+    if Path(job.data_args.dataset_name_or_path).is_dir():
+        return create_local_dataset(job)
+
+    return create_hf_dataset(job)</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.processing.create_hf_dataset"><code class="name flex">
+<span>def <span class="ident">create_hf_dataset</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>) ‑> datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_hf_dataset(job: Job) -&gt; DatasetDict | IterableDatasetDict:
+    data_args = job.data_args
+
+    dataset = DatasetDict()
+    if data_args.stream_dataset:
+        dataset = IterableDatasetDict()
+
+    if job.training_args.do_train:
+        dataset[&#34;train&#34;] = load_dataset(
+            data_args.dataset_name_or_path,
+            data_args.dataset_config_name,
+            streaming=data_args.stream_dataset,
+            split=data_args.train_split_name,
+            token=data_args.token,
+        )
+
+        if data_args.audio_column_name not in dataset[&#34;train&#34;].column_names:
+            raise ValueError(
+                f&#34;audio_column_name &#39;{data_args.audio_column_name}&#39; not found&#34;
+                f&#34; in dataset &#39;{data_args.dataset_name_or_path}&#39;.&#34;
+                &#34; Make sure to set `audio_column_name` to the correct audio column - one of&#34;
+                f&#34; {&#39;, &#39;.join(dataset[&#39;train&#39;].column_names)}.&#34;
+            )
+
+        if data_args.text_column_name not in dataset[&#34;train&#34;].column_names:
+            raise ValueError(
+                f&#34;text_column_name {data_args.text_column_name} not found&#34;
+                f&#34; in dataset &#39;{data_args.dataset_name_or_path}&#39;. &#34;
+                &#34;Make sure to set `text_column_name` to the correct text column - one of &#34;
+                f&#34;{&#39;, &#39;.join(dataset[&#39;train&#39;].column_names)}.&#34;
+            )
+
+    if job.training_args.do_eval:
+        dataset[&#34;eval&#34;] = load_dataset(
+            data_args.dataset_name_or_path,
+            data_args.dataset_config_name,
+            split=data_args.eval_split_name,
+            token=data_args.token,
+            streaming=data_args.stream_dataset,
+        )
+
+    return dataset</code></pre>
+</details>
+</dd>
+<dt id="elpis.datasets.processing.create_local_dataset"><code class="name flex">
+<span>def <span class="ident">create_local_dataset</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, test_size: float = 0.2) ‑> datasets.dataset_dict.DatasetDict</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Creates a dataset with test/train splits from the data within a given
 directory.</p>
 <h2 id="parameters">Parameters</h2>
-<p>dataset_path: The path to the unprocessed dataset files.
-cache_dir: The path to save the processed dataset.
+<p>job: The training job to run.
 test_size: The percentage of the dataset to allocate as the test set.</p>
 <h2 id="returns">Returns</h2>
 <p>A dataset dictionary with test and train splits.</p></div>
@@ -145,99 +438,144 @@ test_size: The percentage of the dataset to allocate as the test set.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def create_dataset(
-    dataset_path: Path, cache_dir: Optional[Path] = None, test_size: float = 0.2
+<pre><code class="python">def create_local_dataset(
+    job: Job,
+    test_size: float = 0.2,
 ) -&gt; DatasetDict:
     &#34;&#34;&#34;Creates a dataset with test/train splits from the data within a given
     directory.
 
     Parameters:
-        dataset_path: The path to the unprocessed dataset files.
-        cache_dir: The path to save the processed dataset.
+        job: The training job to run.
         test_size: The percentage of the dataset to allocate as the test set.
 
     Returns:
         A dataset dictionary with test and train splits.
     &#34;&#34;&#34;
+    dataset_path = Path(job.data_args.dataset_name_or_path)
+    if not dataset_path.is_dir():
+        raise ValueError(
+            f&#34;Attempting to create local dataset from non-existent &#34;
+            f&#34;directory: {dataset_path}.&#34;
+        )
 
     transcript_files = [
         str(dataset_path / file)
         for file in os.listdir(dataset_path)
         if (dataset_path / file).suffix == &#34;.json&#34;
     ]
-    # Annoying hack
-    if cache_dir is not None:
-        cache_dir = str(cache_dir)  # type: ignore
+    logger.debug(
+        f&#34;Transcript file paths sample: {transcript_files[:LOGGING_TRANSCRIPT_SAMPLE]}&#34;
+    )
 
-    dataset = load_dataset(&#34;json&#34;, data_files=transcript_files, cache_dir=cache_dir)  # type: ignore
+    dataset = load_dataset(&#34;json&#34;, data_files=transcript_files, cache_dir=job.model_args.cache_dir)  # type: ignore
 
     # Convert the audio file name column into the matching audio data
-    dataset = dataset.rename_column(&#34;audio_file&#34;, AUDIO_COLUMN)
+    audio_column = job.data_args.audio_column_name
+    dataset = dataset.rename_column(&#34;audio_file&#34;, audio_column)
+    logger.debug(f&#34;Dataset audio file paths sample: {dataset[&#39;train&#39;][audio_column][:LOGGING_TRANSCRIPT_SAMPLE]}&#34;)  # type: ignore
 
     def resolve_audio_path(row: Dict[str, Any]) -&gt; Dict[str, Any]:
-        row[AUDIO_COLUMN] = str(dataset_path / row[AUDIO_COLUMN])
+        # Forcefully resolve to same dir as dataset.
+        path = dataset_path / Path(row[audio_column]).name
+        row[audio_column] = str(path.absolute())
         return row
 
     dataset = dataset.map(resolve_audio_path)
-    dataset = dataset.cast_column(AUDIO_COLUMN, Audio(sampling_rate=SAMPLING_RATE))
+    logger.debug(f&#34;Dataset audio file paths post-resolution: {dataset[&#39;train&#39;][audio_column][:LOGGING_TRANSCRIPT_SAMPLE]}&#34;)  # type: ignore
 
-    return dataset[&#34;train&#34;].train_test_split(test_size=test_size)  # type: ignore</code></pre>
+    dataset = dataset[&#34;train&#34;].train_test_split(test_size=test_size, seed=job.training_args.seed)  # type: ignore
+    # rename test to eval
+    dataset[&#34;eval&#34;] = dataset[&#34;test&#34;]
+    dataset.pop(&#34;test&#34;)
+
+    return dataset</code></pre>
 </details>
 </dd>
 <dt id="elpis.datasets.processing.prepare_dataset"><code class="name flex">
-<span>def <span class="ident">prepare_dataset</span></span>(<span>dataset: datasets.dataset_dict.DatasetDict, processor: transformers.models.wav2vec2.processing_wav2vec2.Wav2Vec2Processor) ‑> datasets.dataset_dict.DatasetDict</span>
+<span>def <span class="ident">prepare_dataset</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, tokenizer: transformers.models.auto.tokenization_auto.AutoTokenizer, feature_extractor: transformers.models.auto.feature_extraction_auto.AutoFeatureExtractor, dataset: datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict) ‑> datasets.dataset_dict.DatasetDict | datasets.dataset_dict.IterableDatasetDict</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Runs some preprocessing over the given dataset.</p>
-<p>TODO: I'm going to be honest, I have no idea what this does, and need some
-smart ML knight in shining armour to write a propert description.</p>
 <h2 id="parameters">Parameters</h2>
-<p>dataset: The dataset to apply the preprocessing
+<p>dataset: The dataset on which to apply the preprocessing
 processor: The processor to apply over the dataset</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def prepare_dataset(dataset: DatasetDict, processor: Wav2Vec2Processor) -&gt; DatasetDict:
+<pre><code class="python">def prepare_dataset(
+    job: Job,
+    tokenizer: AutoTokenizer,
+    feature_extractor: AutoFeatureExtractor,
+    dataset: DatasetDict | IterableDatasetDict,
+) -&gt; DatasetDict | IterableDatasetDict:
     &#34;&#34;&#34;Runs some preprocessing over the given dataset.
 
-    TODO: I&#39;m going to be honest, I have no idea what this does, and need some
-    smart ML knight in shining armour to write a propert description.
-
     Parameters:
-        dataset: The dataset to apply the preprocessing
+        dataset: The dataset on which to apply the preprocessing
         processor: The processor to apply over the dataset
     &#34;&#34;&#34;
+    dataset = clean_dataset(job, dataset)
+    dataset = constrain_to_max_samples(job, dataset)
 
-    logger.debug(f&#34;Dataset pre prep: {dataset}&#34;)
-    logger.debug(f&#34;Dataset[train] pre prep: {dataset[&#39;train&#39;][&#39;transcript&#39;]}&#34;)
-    logger.debug(f&#34;Tokenizer vocab: {processor.tokenizer.vocab}&#34;)  # type: ignore
-
-    def _prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
-        # Also from https://huggingface.co/blog/fine-tune-xlsr-wav2vec2
-        audio = batch[&#34;audio&#34;]
-
-        batch[&#34;input_values&#34;] = processor(
-            audio[&#34;array&#34;], sampling_rate=audio[&#34;sampling_rate&#34;]
-        ).input_values[0]
-        batch[&#34;input_length&#34;] = len(batch[&#34;input_values&#34;])
-
-        batch[&#34;labels&#34;] = processor(text=batch[&#34;transcript&#34;]).input_ids
-
-        return batch
-
-    column_names = [dataset.column_names[key] for key in dataset.column_names.keys()]
-    # flatten
-    columns_to_remove = list(chain.from_iterable(column_names))
-
-    dataset = dataset.map(
-        _prepare_dataset,
-        remove_columns=columns_to_remove,
-        num_proc=PROCESSOR_COUNT,
+    # Load the audio data and resample if necessary.
+    dataset = dataset.cast_column(
+        job.data_args.audio_column_name,
+        Audio(sampling_rate=feature_extractor.sampling_rate),  # type: ignore
     )
 
-    logger.debug(f&#34;Dataset post prep: {dataset}&#34;)
-    logger.debug(f&#34;Training labels: {dataset[&#39;train&#39;][&#39;labels&#39;]}&#34;)
+    def _prepare_dataset(batch: Dict) -&gt; Dict[str, List]:
+        audio = batch[job.data_args.audio_column_name]
+        inputs = feature_extractor(  # type: ignore
+            audio[&#34;array&#34;], sampling_rate=audio[&#34;sampling_rate&#34;]
+        )
+
+        batch[&#34;input_values&#34;] = inputs.input_values[0]
+        batch[&#34;input_length&#34;] = len(batch[&#34;input_values&#34;])
+
+        # encode targets
+        additional_kwargs = {}
+        phoneme_language = job.data_args.phoneme_language
+        if phoneme_language is not None:
+            additional_kwargs[&#34;phonemizer_lang&#34;] = phoneme_language
+
+        batch[&#34;labels&#34;] = tokenizer(batch[job.data_args.text_column_name], **additional_kwargs).input_ids  # type: ignore
+        return batch
+
+    max_input_length = (
+        job.data_args.max_duration_in_seconds * feature_extractor.sampling_rate  # type: ignore
+    )
+    min_input_length = (
+        job.data_args.min_duration_in_seconds * feature_extractor.sampling_rate  # type: ignore
+    )
+
+    def is_audio_in_length_range(length: int):
+        return length &gt;= min_input_length and length &lt;= max_input_length
+
+    with job.training_args.main_process_first(desc=&#34;dataset map preprocessing&#34;):
+        worker_count = job.data_args.preprocessing_num_workers
+
+        kwargs = {}
+        if not job.data_args.stream_dataset:
+            kwargs = {
+                &#34;num_proc&#34;: worker_count,
+                &#34;desc&#34;: &#34;Dataset Preprocessing&#34;,
+            }
+
+        dataset = dataset.map(
+            _prepare_dataset,
+            remove_columns=next(iter(dataset.values())).column_names,
+            **kwargs,
+        )
+
+        # filter data that is shorter than min_input_length
+        dataset = dataset.filter(
+            is_audio_in_length_range, input_columns=[&#34;input_length&#34;], **kwargs
+        )
+
+    logger.info(f&#34;Test encoding labels: {dataset[&#39;train&#39;][0][&#39;labels&#39;]}&#34;)
+
     return dataset</code></pre>
 </details>
 </dd>
@@ -259,7 +597,11 @@ processor: The processor to apply over the dataset</p></div>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
+<li><code><a title="elpis.datasets.processing.clean_dataset" href="#elpis.datasets.processing.clean_dataset">clean_dataset</a></code></li>
+<li><code><a title="elpis.datasets.processing.constrain_to_max_samples" href="#elpis.datasets.processing.constrain_to_max_samples">constrain_to_max_samples</a></code></li>
 <li><code><a title="elpis.datasets.processing.create_dataset" href="#elpis.datasets.processing.create_dataset">create_dataset</a></code></li>
+<li><code><a title="elpis.datasets.processing.create_hf_dataset" href="#elpis.datasets.processing.create_hf_dataset">create_hf_dataset</a></code></li>
+<li><code><a title="elpis.datasets.processing.create_local_dataset" href="#elpis.datasets.processing.create_local_dataset">create_local_dataset</a></code></li>
 <li><code><a title="elpis.datasets.processing.prepare_dataset" href="#elpis.datasets.processing.prepare_dataset">prepare_dataset</a></code></li>
 </ul>
 </li>

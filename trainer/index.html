@@ -26,20 +26,15 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from elpis.trainer.job import TrainingJob, TrainingOptions, TrainingStatus
-from elpis.trainer.trainer import train
+<pre><code class="python">from elpis.trainer.trainer import run_job
 
-__all__ = [&#34;TrainingJob&#34;, &#34;TrainingOptions&#34;, &#34;TrainingStatus&#34;, &#34;train&#34;]</code></pre>
+__all__ = [&#34;run_job&#34;]</code></pre>
 </details>
 </section>
 <section>
 <h2 class="section-title" id="header-submodules">Sub-modules</h2>
 <dl>
 <dt><code class="name"><a title="elpis.trainer.data_collator" href="data_collator.html">elpis.trainer.data_collator</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt><code class="name"><a title="elpis.trainer.job" href="job.html">elpis.trainer.job</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -62,16 +57,14 @@ __all__ = [&#34;TrainingJob&#34;, &#34;TrainingOptions&#34;, &#34;TrainingStatus
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="elpis.trainer.train"><code class="name flex">
-<span>def <span class="ident">train</span></span>(<span>job: <a title="elpis.trainer.job.TrainingJob" href="job.html#elpis.trainer.job.TrainingJob">TrainingJob</a>, output_dir: pathlib.Path, dataset_dir: pathlib.Path, cache_dir: Optional[pathlib.Path] = None, log_file: Optional[pathlib.Path] = None) ‑> pathlib.Path</span>
+<dt id="elpis.trainer.run_job"><code class="name flex">
+<span>def <span class="ident">run_job</span></span>(<span>job: <a title="elpis.models.job.Job" href="../models/job.html#elpis.models.job.Job">Job</a>, log_file: Optional[pathlib.Path] = None) ‑> pathlib.Path</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Fine-tunes a model for use in transcription.</p>
 <h2 id="parameters">Parameters</h2>
 <p>job: Info about the training job, e.g. training options.
-output_dir: Where to save the trained model.
 dataset_dir: A directory containing the preprocessed dataset to train with.
-cache_dir: A directory to use for caching HFT downloads and datasets.
 log_file: An optional file to write training logs to.</p>
 <h2 id="returns">Returns</h2>
 <p>A path to the folder containing the trained model.</p></div>
@@ -79,399 +72,100 @@ log_file: An optional file to write training logs to.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def train(
-    job: TrainingJob,
-    output_dir: Path,
-    dataset_dir: Path,
-    cache_dir: Optional[Path] = None,
+<pre><code class="python">def run_job(
+    job: Job,
     log_file: Optional[Path] = None,
 ) -&gt; Path:
     &#34;&#34;&#34;Fine-tunes a model for use in transcription.
 
     Parameters:
         job: Info about the training job, e.g. training options.
-        output_dir: Where to save the trained model.
         dataset_dir: A directory containing the preprocessed dataset to train with.
-        cache_dir: A directory to use for caching HFT downloads and datasets.
         log_file: An optional file to write training logs to.
 
     Returns:
         A path to the folder containing the trained model.
     &#34;&#34;&#34;
 
-    context = log_to_file(log_file) if log_file is not None else nullcontext()
-    with context:
+    logging_context = log_to_file(log_file) if log_file is not None else nullcontext()
+    with logging_context:
+        # Setup required directories.
+        output_dir = job.training_args.output_dir
+        cache_dir = job.model_args.cache_dir
+        Path(output_dir).mkdir(exist_ok=True, parents=True)
+
+        job.save(Path(output_dir) / &#34;job.json&#34;)
+        set_seed(job.training_args.seed)
+
         logger.info(&#34;Preparing Datasets...&#34;)
-        dataset = create_dataset(dataset_dir, cache_dir)
-        processor = AutoProcessor.from_pretrained(job.base_model, cache_dir=cache_dir)
-        dataset = prepare_dataset(dataset, processor)
+        config = create_config(job)
+        dataset = create_dataset(job)
+
+        tokenizer = create_tokenizer(job, config, dataset)
+        logger.info(f&#34;Tokenizer: {tokenizer}&#34;)  # type: ignore
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
+            job.model_args.model_name_or_path,
+            cache_dir=cache_dir,
+            token=job.data_args.token,
+            trust_remote_code=job.data_args.trust_remote_code,
+        )
+        dataset = prepare_dataset(job, tokenizer, feature_extractor, dataset)
         logger.info(&#34;Finished Preparing Datasets&#34;)
 
+        update_config(job, config, tokenizer)
+
         logger.info(&#34;Downloading pretrained model...&#34;)
-        model = AutoModelForCTC.from_pretrained(
-            job.base_model,
-            cache_dir=cache_dir,
-            ctc_loss_reduction=&#34;mean&#34;,
-            pad_token_id=processor.tokenizer.pad_token_id,
-        )
+        model = create_ctc_model(job, config)
         logger.info(&#34;Downloaded model.&#34;)
 
-        if job.options.freeze_feature_extractor:
-            model.freeze_feature_extractor()
+        # Now save everything to be able to create a single processor later
+        # make sure all processes wait until data is saved
+        logger.info(&#34;Saving config, tokenizer and feature extractor.&#34;)
+        with job.training_args.main_process_first():
+            # only the main process saves them
+            if is_main_process(job.training_args.local_rank):
+                feature_extractor.save_pretrained(output_dir)
+                tokenizer.save_pretrained(output_dir)  # type: ignore
+                config.save_pretrained(output_dir)  # type: ignore
 
-        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        output_dir.mkdir(exist_ok=True, parents=True)
+        try:
+            processor = AutoProcessor.from_pretrained(output_dir)
+        except (OSError, KeyError):
+            warnings.warn(
+                &#34;Loading a processor from a feature extractor config that does not&#34;
+                &#34; include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following &#34;
+                &#34; attribute to your `preprocessor_config.json` file to suppress this warning: &#34;
+                &#34; `&#39;processor_class&#39;: &#39;Wav2Vec2Processor&#39;`&#34;,
+                FutureWarning,
+            )
+            processor = Wav2Vec2Processor.from_pretrained(output_dir)
 
+        data_collator = DataCollatorCTCWithPadding(processor=processor)  # type: ignore
+
+        # Initialize Trainer
         trainer = Trainer(
-            model=model,
-            args=job.to_training_args(output_dir),
-            train_dataset=dataset[&#34;train&#34;],  # type: ignore
-            eval_dataset=dataset[&#34;test&#34;],  # type: ignore
-            tokenizer=processor.feature_extractor,
+            model=model,  # type: ignore
             data_collator=data_collator,
-            compute_metrics=create_metrics(job.metrics, processor),
+            args=job.training_args,
+            compute_metrics=create_metrics(job.data_args.eval_metrics, processor),
+            train_dataset=dataset[&#34;train&#34;] if job.training_args.do_train else None,  # type: ignore
+            eval_dataset=dataset[&#34;eval&#34;] if job.training_args.do_eval else None,  # type: ignore
+            tokenizer=processor,  # type: ignore
         )
 
         logger.info(f&#34;Begin training model...&#34;)
-        trainer.train()
+        train(job, trainer, dataset)
         logger.info(f&#34;Finished training!&#34;)
 
-        logger.info(f&#34;Saving model @ {output_dir}&#34;)
-        trainer.save_model()
-        trainer.save_state()
-        processor.save_pretrained(output_dir)
-        logger.info(f&#34;Model written to disk.&#34;)
+        evaluate(job, trainer, dataset)
+        clean_up(job, trainer)
 
-        metrics = trainer.evaluate()
-        logger.info(&#34;==== Metrics ====&#34;)
-        trainer.log_metrics(&#34;eval&#34;, metrics)
-        trainer.save_metrics(&#34;eval&#34;, metrics)
-        logger.info(metrics)
-
-        return output_dir</code></pre>
+        return Path(output_dir)</code></pre>
 </details>
 </dd>
 </dl>
 </section>
 <section>
-<h2 class="section-title" id="header-classes">Classes</h2>
-<dl>
-<dt id="elpis.trainer.TrainingJob"><code class="flex name class">
-<span>class <span class="ident">TrainingJob</span></span>
-<span>(</span><span>model_name: str, dataset_name: str, options: <a title="elpis.trainer.TrainingOptions" href="#elpis.trainer.TrainingOptions">TrainingOptions</a>, status: <a title="elpis.trainer.TrainingStatus" href="#elpis.trainer.TrainingStatus">TrainingStatus</a> = TrainingStatus.WAITING, base_model: str = 'facebook/wav2vec2-base-960h', sampling_rate: int = 16000, metrics: Tuple[str, ...] = ('wer', 'cer'))</span>
-</code></dt>
-<dd>
-<div class="desc"><p>A class representing a training job for a model</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@dataclass
-class TrainingJob:
-    &#34;&#34;&#34;A class representing a training job for a model&#34;&#34;&#34;
-
-    model_name: str
-    dataset_name: str
-    options: TrainingOptions
-    status: TrainingStatus = TrainingStatus.WAITING
-    base_model: str = BASE_MODEL
-    sampling_rate: int = SAMPLING_RATE
-    metrics: Tuple[str, ...] = METRICS
-
-    def to_training_args(self, output_dir: Path, **kwargs) -&gt; TrainingArguments:
-        return TrainingArguments(
-            output_dir=str(output_dir),
-            group_by_length=True,
-            num_train_epochs=self.options.epochs,
-            per_device_train_batch_size=self.options.batch_size,
-            per_device_eval_batch_size=self.options.batch_size,
-            gradient_accumulation_steps=2,
-            evaluation_strategy=&#34;steps&#34;,
-            fp16=True if torch.cuda.is_available() else False,
-            gradient_checkpointing=True,
-            learning_rate=self.options.learning_rate,
-            weight_decay=0.005,
-            save_steps=500,
-            eval_steps=500,
-            logging_steps=500,
-            warmup_steps=1000,
-            save_total_limit=2,
-            overwrite_output_dir=True,
-            do_train=True,
-            do_eval=True,
-            **kwargs,
-        )
-
-    @staticmethod
-    def from_dict(data: Dict[str, Any]) -&gt; TrainingJob:
-        return TrainingJob(
-            model_name=data[&#34;model_name&#34;],
-            dataset_name=data[&#34;dataset_name&#34;],
-            options=TrainingOptions.from_dict(data[&#34;options&#34;]),
-            status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
-            base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
-            sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
-            metrics=data.get(&#34;metrics&#34;, METRICS),
-        )
-
-    def to_dict(self) -&gt; Dict[str, Any]:
-        result = dict(self.__dict__)
-        result |= dict(options=self.options.to_dict(), status=self.status.value)
-        return result</code></pre>
-</details>
-<h3>Class variables</h3>
-<dl>
-<dt id="elpis.trainer.TrainingJob.base_model"><code class="name">var <span class="ident">base_model</span> : str</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingJob.dataset_name"><code class="name">var <span class="ident">dataset_name</span> : str</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingJob.metrics"><code class="name">var <span class="ident">metrics</span> : Tuple[str, ...]</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingJob.model_name"><code class="name">var <span class="ident">model_name</span> : str</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingJob.options"><code class="name">var <span class="ident">options</span> : <a title="elpis.trainer.job.TrainingOptions" href="job.html#elpis.trainer.job.TrainingOptions">TrainingOptions</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingJob.sampling_rate"><code class="name">var <span class="ident">sampling_rate</span> : int</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingJob.status"><code class="name">var <span class="ident">status</span> : <a title="elpis.trainer.job.TrainingStatus" href="job.html#elpis.trainer.job.TrainingStatus">TrainingStatus</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Static methods</h3>
-<dl>
-<dt id="elpis.trainer.TrainingJob.from_dict"><code class="name flex">
-<span>def <span class="ident">from_dict</span></span>(<span>data: Dict[str, Any]) ‑> <a title="elpis.trainer.job.TrainingJob" href="job.html#elpis.trainer.job.TrainingJob">TrainingJob</a></span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@staticmethod
-def from_dict(data: Dict[str, Any]) -&gt; TrainingJob:
-    return TrainingJob(
-        model_name=data[&#34;model_name&#34;],
-        dataset_name=data[&#34;dataset_name&#34;],
-        options=TrainingOptions.from_dict(data[&#34;options&#34;]),
-        status=TrainingStatus(data.get(&#34;status&#34;, TrainingStatus.WAITING)),
-        base_model=data.get(&#34;base_model&#34;, BASE_MODEL),
-        sampling_rate=data.get(&#34;sampling_rate&#34;, SAMPLING_RATE),
-        metrics=data.get(&#34;metrics&#34;, METRICS),
-    )</code></pre>
-</details>
-</dd>
-</dl>
-<h3>Methods</h3>
-<dl>
-<dt id="elpis.trainer.TrainingJob.to_dict"><code class="name flex">
-<span>def <span class="ident">to_dict</span></span>(<span>self) ‑> Dict[str, Any]</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def to_dict(self) -&gt; Dict[str, Any]:
-    result = dict(self.__dict__)
-    result |= dict(options=self.options.to_dict(), status=self.status.value)
-    return result</code></pre>
-</details>
-</dd>
-<dt id="elpis.trainer.TrainingJob.to_training_args"><code class="name flex">
-<span>def <span class="ident">to_training_args</span></span>(<span>self, output_dir: Path, **kwargs) ‑> transformers.training_args.TrainingArguments</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def to_training_args(self, output_dir: Path, **kwargs) -&gt; TrainingArguments:
-    return TrainingArguments(
-        output_dir=str(output_dir),
-        group_by_length=True,
-        num_train_epochs=self.options.epochs,
-        per_device_train_batch_size=self.options.batch_size,
-        per_device_eval_batch_size=self.options.batch_size,
-        gradient_accumulation_steps=2,
-        evaluation_strategy=&#34;steps&#34;,
-        fp16=True if torch.cuda.is_available() else False,
-        gradient_checkpointing=True,
-        learning_rate=self.options.learning_rate,
-        weight_decay=0.005,
-        save_steps=500,
-        eval_steps=500,
-        logging_steps=500,
-        warmup_steps=1000,
-        save_total_limit=2,
-        overwrite_output_dir=True,
-        do_train=True,
-        do_eval=True,
-        **kwargs,
-    )</code></pre>
-</details>
-</dd>
-</dl>
-</dd>
-<dt id="elpis.trainer.TrainingOptions"><code class="flex name class">
-<span>class <span class="ident">TrainingOptions</span></span>
-<span>(</span><span>batch_size: int = 4, epochs: int = 2, learning_rate: float = 0.0001, min_duration: int = 0, max_duration: int = 60, word_delimiter_token: str = ' ', test_size: float = 0.2, freeze_feature_extractor: bool = False)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>A class representing some commonly changed training options</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@dataclass
-class TrainingOptions:
-    &#34;&#34;&#34;A class representing some commonly changed training options&#34;&#34;&#34;
-
-    batch_size: int = 4
-    epochs: int = 2
-    learning_rate: float = 1e-4
-    min_duration: int = 0
-    max_duration: int = 60
-    word_delimiter_token: str = &#34; &#34;
-    test_size: float = 0.2
-    freeze_feature_extractor: bool = False
-
-    @staticmethod
-    def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
-        field_names = [field.name for field in fields(TrainingOptions)]
-        kwargs = {key: data[key] for key in data if key in field_names}
-        return TrainingOptions(**kwargs)
-
-    def to_dict(self) -&gt; Dict[str, Any]:
-        return dict(self.__dict__)</code></pre>
-</details>
-<h3>Class variables</h3>
-<dl>
-<dt id="elpis.trainer.TrainingOptions.batch_size"><code class="name">var <span class="ident">batch_size</span> : int</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingOptions.epochs"><code class="name">var <span class="ident">epochs</span> : int</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingOptions.freeze_feature_extractor"><code class="name">var <span class="ident">freeze_feature_extractor</span> : bool</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingOptions.learning_rate"><code class="name">var <span class="ident">learning_rate</span> : float</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingOptions.max_duration"><code class="name">var <span class="ident">max_duration</span> : int</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingOptions.min_duration"><code class="name">var <span class="ident">min_duration</span> : int</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingOptions.test_size"><code class="name">var <span class="ident">test_size</span> : float</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingOptions.word_delimiter_token"><code class="name">var <span class="ident">word_delimiter_token</span> : str</code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-<h3>Static methods</h3>
-<dl>
-<dt id="elpis.trainer.TrainingOptions.from_dict"><code class="name flex">
-<span>def <span class="ident">from_dict</span></span>(<span>data: Dict[str, Any]) ‑> <a title="elpis.trainer.job.TrainingOptions" href="job.html#elpis.trainer.job.TrainingOptions">TrainingOptions</a></span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@staticmethod
-def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
-    field_names = [field.name for field in fields(TrainingOptions)]
-    kwargs = {key: data[key] for key in data if key in field_names}
-    return TrainingOptions(**kwargs)</code></pre>
-</details>
-</dd>
-</dl>
-<h3>Methods</h3>
-<dl>
-<dt id="elpis.trainer.TrainingOptions.to_dict"><code class="name flex">
-<span>def <span class="ident">to_dict</span></span>(<span>self) ‑> Dict[str, Any]</span>
-</code></dt>
-<dd>
-<div class="desc"></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def to_dict(self) -&gt; Dict[str, Any]:
-    return dict(self.__dict__)</code></pre>
-</details>
-</dd>
-</dl>
-</dd>
-<dt id="elpis.trainer.TrainingStatus"><code class="flex name class">
-<span>class <span class="ident">TrainingStatus</span></span>
-<span>(</span><span>value, names=None, *, module=None, qualname=None, type=None, start=1)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>An enumeration.</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">class TrainingStatus(Enum):
-    WAITING = &#34;waiting&#34;
-    TRAINING = &#34;training&#34;
-    FINISHED = &#34;finished&#34;
-    ERROR = &#34;error&#34;</code></pre>
-</details>
-<h3>Ancestors</h3>
-<ul class="hlist">
-<li>enum.Enum</li>
-</ul>
-<h3>Class variables</h3>
-<dl>
-<dt id="elpis.trainer.TrainingStatus.ERROR"><code class="name">var <span class="ident">ERROR</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingStatus.FINISHED"><code class="name">var <span class="ident">FINISHED</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingStatus.TRAINING"><code class="name">var <span class="ident">TRAINING</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="elpis.trainer.TrainingStatus.WAITING"><code class="name">var <span class="ident">WAITING</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-</dl>
-</dd>
-</dl>
 </section>
 </article>
 <nav id="sidebar">
@@ -488,7 +182,6 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 <li><h3><a href="#header-submodules">Sub-modules</a></h3>
 <ul>
 <li><code><a title="elpis.trainer.data_collator" href="data_collator.html">elpis.trainer.data_collator</a></code></li>
-<li><code><a title="elpis.trainer.job" href="job.html">elpis.trainer.job</a></code></li>
 <li><code><a title="elpis.trainer.metrics" href="metrics.html">elpis.trainer.metrics</a></code></li>
 <li><code><a title="elpis.trainer.trainer" href="trainer.html">elpis.trainer.trainer</a></code></li>
 <li><code><a title="elpis.trainer.utils" href="utils.html">elpis.trainer.utils</a></code></li>
@@ -496,50 +189,7 @@ def from_dict(data: Dict[str, Any]) -&gt; &#34;TrainingOptions&#34;:
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
-<li><code><a title="elpis.trainer.train" href="#elpis.trainer.train">train</a></code></li>
-</ul>
-</li>
-<li><h3><a href="#header-classes">Classes</a></h3>
-<ul>
-<li>
-<h4><code><a title="elpis.trainer.TrainingJob" href="#elpis.trainer.TrainingJob">TrainingJob</a></code></h4>
-<ul class="two-column">
-<li><code><a title="elpis.trainer.TrainingJob.base_model" href="#elpis.trainer.TrainingJob.base_model">base_model</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.dataset_name" href="#elpis.trainer.TrainingJob.dataset_name">dataset_name</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.from_dict" href="#elpis.trainer.TrainingJob.from_dict">from_dict</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.metrics" href="#elpis.trainer.TrainingJob.metrics">metrics</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.model_name" href="#elpis.trainer.TrainingJob.model_name">model_name</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.options" href="#elpis.trainer.TrainingJob.options">options</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.sampling_rate" href="#elpis.trainer.TrainingJob.sampling_rate">sampling_rate</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.status" href="#elpis.trainer.TrainingJob.status">status</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.to_dict" href="#elpis.trainer.TrainingJob.to_dict">to_dict</a></code></li>
-<li><code><a title="elpis.trainer.TrainingJob.to_training_args" href="#elpis.trainer.TrainingJob.to_training_args">to_training_args</a></code></li>
-</ul>
-</li>
-<li>
-<h4><code><a title="elpis.trainer.TrainingOptions" href="#elpis.trainer.TrainingOptions">TrainingOptions</a></code></h4>
-<ul class="">
-<li><code><a title="elpis.trainer.TrainingOptions.batch_size" href="#elpis.trainer.TrainingOptions.batch_size">batch_size</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.epochs" href="#elpis.trainer.TrainingOptions.epochs">epochs</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.freeze_feature_extractor" href="#elpis.trainer.TrainingOptions.freeze_feature_extractor">freeze_feature_extractor</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.from_dict" href="#elpis.trainer.TrainingOptions.from_dict">from_dict</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.learning_rate" href="#elpis.trainer.TrainingOptions.learning_rate">learning_rate</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.max_duration" href="#elpis.trainer.TrainingOptions.max_duration">max_duration</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.min_duration" href="#elpis.trainer.TrainingOptions.min_duration">min_duration</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.test_size" href="#elpis.trainer.TrainingOptions.test_size">test_size</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.to_dict" href="#elpis.trainer.TrainingOptions.to_dict">to_dict</a></code></li>
-<li><code><a title="elpis.trainer.TrainingOptions.word_delimiter_token" href="#elpis.trainer.TrainingOptions.word_delimiter_token">word_delimiter_token</a></code></li>
-</ul>
-</li>
-<li>
-<h4><code><a title="elpis.trainer.TrainingStatus" href="#elpis.trainer.TrainingStatus">TrainingStatus</a></code></h4>
-<ul class="">
-<li><code><a title="elpis.trainer.TrainingStatus.ERROR" href="#elpis.trainer.TrainingStatus.ERROR">ERROR</a></code></li>
-<li><code><a title="elpis.trainer.TrainingStatus.FINISHED" href="#elpis.trainer.TrainingStatus.FINISHED">FINISHED</a></code></li>
-<li><code><a title="elpis.trainer.TrainingStatus.TRAINING" href="#elpis.trainer.TrainingStatus.TRAINING">TRAINING</a></code></li>
-<li><code><a title="elpis.trainer.TrainingStatus.WAITING" href="#elpis.trainer.TrainingStatus.WAITING">WAITING</a></code></li>
-</ul>
-</li>
+<li><code><a title="elpis.trainer.run_job" href="#elpis.trainer.run_job">run_job</a></code></li>
 </ul>
 </li>
 </ul>

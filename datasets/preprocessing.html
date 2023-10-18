@@ -33,8 +33,6 @@ from itertools import chain
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-from loguru import logger
-
 import elpis.utils.audio as audio
 from elpis.datasets.clean_text import clean_text
 from elpis.datasets.dataset import CleaningOptions, ProcessingBatch
@@ -93,8 +91,8 @@ def clean_annotation(
     transcript = clean_text(
         text=annotation.transcript,
         words_to_remove=cleaning_options.words_to_remove,
-        punctuation_to_explode=cleaning_options.punctuation_to_explode,
-        punctuation_to_remove=cleaning_options.punctuation_to_remove,
+        characters_to_explode=cleaning_options.punctuation_to_explode,
+        characters_to_remove=cleaning_options.punctuation_to_remove,
     )
     result = copy(annotation)
     result.transcript = transcript
@@ -221,8 +219,8 @@ cleaning_options: The cleaning options for the dataset.</p>
     transcript = clean_text(
         text=annotation.transcript,
         words_to_remove=cleaning_options.words_to_remove,
-        punctuation_to_explode=cleaning_options.punctuation_to_explode,
-        punctuation_to_remove=cleaning_options.punctuation_to_remove,
+        characters_to_explode=cleaning_options.punctuation_to_explode,
+        characters_to_remove=cleaning_options.punctuation_to_remove,
     )
     result = copy(annotation)
     result.transcript = transcript

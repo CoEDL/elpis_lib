@@ -28,8 +28,19 @@
 </summary>
 <pre><code class="python">from elpis.models.annotation import Annotation
 from elpis.models.elan_options import ElanOptions, ElanTierSelector
+from elpis.models.job import DataArguments, Job, ModelArguments
+from elpis.models.vocab import VOCAB_FILE, Vocab
 
-__all__ = [&#34;Annotation&#34;, &#34;ElanOptions&#34;, &#34;ElanTierSelector&#34;]</code></pre>
+__all__ = [
+    &#34;Annotation&#34;,
+    &#34;ElanOptions&#34;,
+    &#34;ElanTierSelector&#34;,
+    &#34;Job&#34;,
+    &#34;Vocab&#34;,
+    &#34;VOCAB_FILE&#34;,
+    &#34;DataArguments&#34;,
+    &#34;ModelArguments&#34;,
+]</code></pre>
 </details>
 </section>
 <section>
@@ -40,6 +51,14 @@ __all__ = [&#34;Annotation&#34;, &#34;ElanOptions&#34;, &#34;ElanTierSelector&#3
 <div class="desc"></div>
 </dd>
 <dt><code class="name"><a title="elpis.models.elan_options" href="elan_options.html">elpis.models.elan_options</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt><code class="name"><a title="elpis.models.job" href="job.html">elpis.models.job</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt><code class="name"><a title="elpis.models.vocab" href="vocab.html">elpis.models.vocab</a></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -184,6 +203,340 @@ the given recording.</p></div>
 </dd>
 </dl>
 </dd>
+<dt id="elpis.models.DataArguments"><code class="flex name class">
+<span>class <span class="ident">DataArguments</span></span>
+<span>(</span><span>dataset_name_or_path: str, dataset_config_name: Optional[str] = None, stream_dataset: bool = False, train_split_name: str = 'train+validation', eval_split_name: str = 'test', audio_column_name: str = 'audio', text_column_name: str = 'text', overwrite_cache: bool = False, preprocessing_num_workers: Optional[int] = None, max_train_samples: Optional[int] = None, max_eval_samples: Optional[int] = None, do_clean: bool = True, words_to_remove: Optional[List[str]] = &lt;factory&gt;, chars_to_remove: Optional[List[str]] = &lt;factory&gt;, chars_to_explode: Optional[List[str]] = &lt;factory&gt;, do_lower_case: Optional[bool] = None, eval_metrics: List[str] = &lt;factory&gt;, max_duration_in_seconds: float = 20.0, min_duration_in_seconds: float = 0.0, preprocessing_only: bool = False, token: Optional[str] = None, use_auth_token: Optional[bool] = None, trust_remote_code: bool = False, unk_token: str = '[UNK]', pad_token: str = '[PAD]', word_delimiter_token: str = '|', phoneme_language: Optional[str] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Arguments pertaining to what data we are going to input our model for training and eval.</p>
+<p>Using <code>HfArgumentParser</code> we can turn this class
+into argparse arguments to be able to specify them on
+the command line.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@dataclass
+class DataArguments:
+    &#34;&#34;&#34;
+    Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
+    &#34;&#34;&#34;
+
+    dataset_name_or_path: str = field(
+        metadata={
+            &#34;help&#34;: &#34;If a path, the path to a directory containing the dataset files. &#34;
+            &#34;Otherwise- the name of the dataset to use (via the datasets library).&#34;
+        }
+    )
+    dataset_config_name: Optional[str] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: &#34;The configuration name of the dataset to use (via the datasets library).&#34;
+        },
+    )
+    stream_dataset: bool = field(
+        default=False,
+        metadata={
+            &#34;help&#34;: &#34;Whether to stream the dataset as opposed to downloading it all at once.&#34;
+        },
+    )
+    train_split_name: str = field(
+        default=&#34;train+validation&#34;,
+        metadata={
+            &#34;help&#34;: (
+                &#34;The name of the training data set split to use (via the datasets library). Defaults to &#34;
+                &#34;&#39;train+validation&#39;&#34;
+            )
+        },
+    )
+    eval_split_name: str = field(
+        default=&#34;test&#34;,
+        metadata={
+            &#34;help&#34;: &#34;The name of the evaluation data set split to use (via the datasets library). Defaults to &#39;test&#39;&#34;
+        },
+    )
+    audio_column_name: str = field(
+        default=&#34;audio&#34;,
+        metadata={
+            &#34;help&#34;: &#34;The name of the dataset column containing the audio data. Defaults to &#39;audio&#39;&#34;
+        },
+    )
+    text_column_name: str = field(
+        default=&#34;text&#34;,
+        metadata={
+            &#34;help&#34;: &#34;The name of the dataset column containing the text data. Defaults to &#39;text&#39;&#34;
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False,
+        metadata={&#34;help&#34;: &#34;Overwrite the cached preprocessed datasets or not.&#34;},
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={&#34;help&#34;: &#34;The number of processes to use for the preprocessing.&#34;},
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: (
+                &#34;For debugging purposes or quicker training, truncate the number of training examples to this &#34;
+                &#34;value if set.&#34;
+            )
+        },
+    )
+    max_eval_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: (
+                &#34;For debugging purposes or quicker training, truncate the number of validation examples to this &#34;
+                &#34;value if set.&#34;
+            )
+        },
+    )
+    do_clean: bool = field(
+        default=True,
+        metadata={&#34;help&#34;: &#34;True if the dataset should be cleaned before use.&#34;},
+    )
+    words_to_remove: Optional[List[str]] = list_field(
+        default=[],
+        metadata={
+            &#34;help&#34;: &#34;A list of words to remove from the transcripts during dataset cleaning.&#34;
+        },
+    )
+    chars_to_remove: Optional[List[str]] = list_field(
+        default=[],
+        metadata={
+            &#34;help&#34;: &#34;A list of characters to remove from the transcripts during dataset cleaning.&#34;
+        },
+    )
+    chars_to_explode: Optional[List[str]] = list_field(
+        default=[],
+        metadata={
+            &#34;help&#34;: &#34;A list of characters to replace with spaces in the transcripts during dataset cleaning.&#34;
+        },
+    )
+    do_lower_case: Optional[bool] = field(
+        default=None,
+        metadata={&#34;help&#34;: &#34;Whether the target text should be lower cased.&#34;},
+    )
+    eval_metrics: List[str] = list_field(  # type: ignore
+        default=[&#34;wer&#34;, &#34;cer&#34;],
+        metadata={
+            &#34;help&#34;: &#34;A list of metrics the model should be evaluated on. E.g. `(&#39;wer&#39;, &#39;cer&#39;)`&#34;
+        },
+    )
+    max_duration_in_seconds: float = field(
+        default=20.0,
+        metadata={
+            &#34;help&#34;: (
+                &#34;Filter audio files that are longer than `max_duration_in_seconds` seconds to&#34;
+                &#34; &#39;max_duration_in_seconds`&#34;
+            )
+        },
+    )
+    min_duration_in_seconds: float = field(
+        default=0.0,
+        metadata={
+            &#34;help&#34;: &#34;Filter audio files that are shorter than `min_duration_in_seconds` seconds&#34;
+        },
+    )
+    preprocessing_only: bool = field(
+        default=False,
+        metadata={
+            &#34;help&#34;: (
+                &#34;Whether to only do data preprocessing and skip training. This is especially useful when data&#34;
+                &#34; preprocessing errors out in distributed training due to timeout. In this case, one should run the&#34;
+                &#34; preprocessing in a non-distributed setup with `preprocessing_only=True` so that the cached datasets&#34;
+                &#34; can consequently be loaded in distributed training&#34;
+            )
+        },
+    )
+    token: Optional[str] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: (
+                &#34;The token to use as HTTP bearer authorization for remote files. If not specified, will use the token &#34;
+                &#34;generated when running `huggingface-cli login` (stored in `~/.huggingface`).&#34;
+            )
+        },
+    )
+    use_auth_token: Optional[bool] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: &#34;The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`.&#34;
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            &#34;help&#34;: (
+                &#34;Whether or not to allow for custom models defined on the Hub in their own modeling files. This option&#34;
+                &#34;should only be set to `True` for repositories you trust and in which you have read the code, as it will&#34;
+                &#34;execute code present on the Hub on your local machine.&#34;
+            )
+        },
+    )
+    unk_token: str = field(
+        default=&#34;[UNK]&#34;,
+        metadata={&#34;help&#34;: &#34;The unk token for the tokenizer&#34;},
+    )
+    pad_token: str = field(
+        default=&#34;[PAD]&#34;,
+        metadata={&#34;help&#34;: &#34;The padding token for the tokenizer&#34;},
+    )
+    word_delimiter_token: str = field(
+        default=&#34;|&#34;,
+        metadata={&#34;help&#34;: &#34;The word delimiter token for the tokenizer&#34;},
+    )
+    phoneme_language: Optional[str] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: (
+                &#34;The target language that should be used be&#34;
+                &#34; passed to the tokenizer for tokenization. Note that&#34;
+                &#34; this is only relevant if the model classifies the&#34;
+                &#34; input audio to a sequence of phoneme sequences.&#34;
+            )
+        },
+    )
+
+    def to_dict(self) -&gt; Dict[str, Any]:
+        result = dict(self.__dict__)
+        return result</code></pre>
+</details>
+<h3>Class variables</h3>
+<dl>
+<dt id="elpis.models.DataArguments.audio_column_name"><code class="name">var <span class="ident">audio_column_name</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.chars_to_explode"><code class="name">var <span class="ident">chars_to_explode</span> : Optional[List[str]]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.chars_to_remove"><code class="name">var <span class="ident">chars_to_remove</span> : Optional[List[str]]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.dataset_config_name"><code class="name">var <span class="ident">dataset_config_name</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.dataset_name_or_path"><code class="name">var <span class="ident">dataset_name_or_path</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.do_clean"><code class="name">var <span class="ident">do_clean</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.do_lower_case"><code class="name">var <span class="ident">do_lower_case</span> : Optional[bool]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.eval_metrics"><code class="name">var <span class="ident">eval_metrics</span> : List[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.eval_split_name"><code class="name">var <span class="ident">eval_split_name</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.max_duration_in_seconds"><code class="name">var <span class="ident">max_duration_in_seconds</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.max_eval_samples"><code class="name">var <span class="ident">max_eval_samples</span> : Optional[int]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.max_train_samples"><code class="name">var <span class="ident">max_train_samples</span> : Optional[int]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.min_duration_in_seconds"><code class="name">var <span class="ident">min_duration_in_seconds</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.overwrite_cache"><code class="name">var <span class="ident">overwrite_cache</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.pad_token"><code class="name">var <span class="ident">pad_token</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.phoneme_language"><code class="name">var <span class="ident">phoneme_language</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.preprocessing_num_workers"><code class="name">var <span class="ident">preprocessing_num_workers</span> : Optional[int]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.preprocessing_only"><code class="name">var <span class="ident">preprocessing_only</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.stream_dataset"><code class="name">var <span class="ident">stream_dataset</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.text_column_name"><code class="name">var <span class="ident">text_column_name</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.token"><code class="name">var <span class="ident">token</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.train_split_name"><code class="name">var <span class="ident">train_split_name</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.trust_remote_code"><code class="name">var <span class="ident">trust_remote_code</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.unk_token"><code class="name">var <span class="ident">unk_token</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.use_auth_token"><code class="name">var <span class="ident">use_auth_token</span> : Optional[bool]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.word_delimiter_token"><code class="name">var <span class="ident">word_delimiter_token</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.DataArguments.words_to_remove"><code class="name">var <span class="ident">words_to_remove</span> : Optional[List[str]]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="elpis.models.DataArguments.to_dict"><code class="name flex">
+<span>def <span class="ident">to_dict</span></span>(<span>self) ‑> Dict[str, Any]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def to_dict(self) -&gt; Dict[str, Any]:
+    result = dict(self.__dict__)
+    return result</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
 <dt id="elpis.models.ElanOptions"><code class="flex name class">
 <span>class <span class="ident">ElanOptions</span></span>
 <span>(</span><span>selection_mechanism: <a title="elpis.models.elan_options.ElanTierSelector" href="elan_options.html#elpis.models.elan_options.ElanTierSelector">ElanTierSelector</a>, selection_value: str)</span>
@@ -302,6 +655,619 @@ def from_dict(cls, data: Dict[str, str]) -&gt; &#34;ElanOptions&#34;:
 </dd>
 </dl>
 </dd>
+<dt id="elpis.models.Job"><code class="flex name class">
+<span>class <span class="ident">Job</span></span>
+<span>(</span><span>model_args: <a title="elpis.models.ModelArguments" href="#elpis.models.ModelArguments">ModelArguments</a>, data_args: <a title="elpis.models.DataArguments" href="#elpis.models.DataArguments">DataArguments</a>, training_args: TrainingArguments)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Generic class which encapsulates elpis training functionality</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@dataclass
+class Job:
+    &#34;&#34;&#34;Generic class which encapsulates elpis training functionality&#34;&#34;&#34;
+
+    model_args: ModelArguments
+    data_args: DataArguments
+    training_args: TrainingArguments
+
+    @staticmethod
+    def parser():
+        return HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))  # type: ignore
+
+    @classmethod
+    def from_args(cls, args=None) -&gt; Job:
+        (
+            model_args,
+            data_args,
+            training_args,
+        ) = Job.parser().parse_args_into_dataclasses(args)
+        return cls(
+            model_args=model_args, data_args=data_args, training_args=training_args
+        )
+
+    @classmethod
+    def from_json(cls, file: Path) -&gt; Job:
+        (
+            model_args,
+            data_args,
+            training_args,
+        ) = Job.parser().parse_json_file(str(file))
+        return cls(
+            model_args=model_args, data_args=data_args, training_args=training_args
+        )
+
+    def save(self, path: Path, overwrite=True) -&gt; None:
+        if not overwrite and path.is_file():
+            return
+
+        with open(path, &#34;w&#34;) as out_file:
+            json.dump(self.to_dict(), out_file)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -&gt; Job:
+        (
+            model_args,
+            data_args,
+            training_args,
+        ) = Job.parser().parse_dict(data)
+        return cls(
+            model_args=model_args, data_args=data_args, training_args=training_args
+        )
+
+    def to_dict(self) -&gt; Dict[str, Any]:
+        return (
+            self.training_args.to_dict()
+            | self.data_args.to_dict()
+            | self.model_args.to_dict()
+        )
+
+    def __eq__(self, __value: object) -&gt; bool:
+        if not isinstance(__value, Job):
+            return False
+
+        job = __value
+
+        return (
+            self.training_args.to_dict() == job.training_args.to_dict()
+            and self.model_args == job.model_args
+            and self.data_args == job.data_args
+        )</code></pre>
+</details>
+<h3>Class variables</h3>
+<dl>
+<dt id="elpis.models.Job.data_args"><code class="name">var <span class="ident">data_args</span> : <a title="elpis.models.job.DataArguments" href="job.html#elpis.models.job.DataArguments">DataArguments</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.Job.model_args"><code class="name">var <span class="ident">model_args</span> : <a title="elpis.models.job.ModelArguments" href="job.html#elpis.models.job.ModelArguments">ModelArguments</a></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.Job.training_args"><code class="name">var <span class="ident">training_args</span> : transformers.training_args.TrainingArguments</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Static methods</h3>
+<dl>
+<dt id="elpis.models.Job.from_args"><code class="name flex">
+<span>def <span class="ident">from_args</span></span>(<span>args=None) ‑> <a title="elpis.models.job.Job" href="job.html#elpis.models.job.Job">Job</a></span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def from_args(cls, args=None) -&gt; Job:
+    (
+        model_args,
+        data_args,
+        training_args,
+    ) = Job.parser().parse_args_into_dataclasses(args)
+    return cls(
+        model_args=model_args, data_args=data_args, training_args=training_args
+    )</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Job.from_dict"><code class="name flex">
+<span>def <span class="ident">from_dict</span></span>(<span>data: Dict[str, Any]) ‑> <a title="elpis.models.job.Job" href="job.html#elpis.models.job.Job">Job</a></span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def from_dict(cls, data: Dict[str, Any]) -&gt; Job:
+    (
+        model_args,
+        data_args,
+        training_args,
+    ) = Job.parser().parse_dict(data)
+    return cls(
+        model_args=model_args, data_args=data_args, training_args=training_args
+    )</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Job.from_json"><code class="name flex">
+<span>def <span class="ident">from_json</span></span>(<span>file: Path) ‑> <a title="elpis.models.job.Job" href="job.html#elpis.models.job.Job">Job</a></span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def from_json(cls, file: Path) -&gt; Job:
+    (
+        model_args,
+        data_args,
+        training_args,
+    ) = Job.parser().parse_json_file(str(file))
+    return cls(
+        model_args=model_args, data_args=data_args, training_args=training_args
+    )</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Job.parser"><code class="name flex">
+<span>def <span class="ident">parser</span></span>(<span>)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@staticmethod
+def parser():
+    return HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))  # type: ignore</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="elpis.models.Job.save"><code class="name flex">
+<span>def <span class="ident">save</span></span>(<span>self, path: Path, overwrite=True) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def save(self, path: Path, overwrite=True) -&gt; None:
+    if not overwrite and path.is_file():
+        return
+
+    with open(path, &#34;w&#34;) as out_file:
+        json.dump(self.to_dict(), out_file)</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Job.to_dict"><code class="name flex">
+<span>def <span class="ident">to_dict</span></span>(<span>self) ‑> Dict[str, Any]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def to_dict(self) -&gt; Dict[str, Any]:
+    return (
+        self.training_args.to_dict()
+        | self.data_args.to_dict()
+        | self.model_args.to_dict()
+    )</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="elpis.models.ModelArguments"><code class="flex name class">
+<span>class <span class="ident">ModelArguments</span></span>
+<span>(</span><span>model_name_or_path: str, tokenizer_name_or_path: Optional[str] = None, cache_dir: Optional[str] = None, freeze_feature_encoder: bool = True, attention_dropout: float = 0.0, activation_dropout: float = 0.0, feat_proj_dropout: float = 0.0, hidden_dropout: float = 0.0, final_dropout: float = 0.0, mask_time_prob: float = 0.05, mask_time_length: int = 10, mask_feature_prob: float = 0.0, mask_feature_length: int = 10, layerdrop: float = 0.0, ctc_loss_reduction: Optional[str] = 'mean', ctc_zero_infinity: bool = False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@dataclass
+class ModelArguments:
+    &#34;&#34;&#34;
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
+    &#34;&#34;&#34;
+
+    model_name_or_path: str = field(
+        metadata={
+            &#34;help&#34;: &#34;Path to pretrained model or model identifier from huggingface.co/models&#34;
+        }
+    )
+    tokenizer_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: &#34;Path to pretrained tokenizer or tokenizer identifier from huggingface.co/models&#34;
+        },
+    )
+    cache_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            &#34;help&#34;: &#34;Where do you want to store the pretrained models downloaded from huggingface.co&#34;
+        },
+    )
+    freeze_feature_encoder: bool = field(
+        default=True,
+        metadata={&#34;help&#34;: &#34;Whether to freeze the feature encoder layers of the model.&#34;},
+    )
+    attention_dropout: float = field(
+        default=0.0,
+        metadata={&#34;help&#34;: &#34;The dropout ratio for the attention probabilities.&#34;},
+    )
+    activation_dropout: float = field(
+        default=0.0,
+        metadata={
+            &#34;help&#34;: &#34;The dropout ratio for activations inside the fully connected layer.&#34;
+        },
+    )
+    feat_proj_dropout: float = field(
+        default=0.0, metadata={&#34;help&#34;: &#34;The dropout ratio for the projected features.&#34;}
+    )
+    hidden_dropout: float = field(
+        default=0.0,
+        metadata={
+            &#34;help&#34;: &#34;The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.&#34;
+        },
+    )
+    final_dropout: float = field(
+        default=0.0,
+        metadata={&#34;help&#34;: &#34;The dropout probability for the final projection layer.&#34;},
+    )
+    mask_time_prob: float = field(
+        default=0.05,
+        metadata={
+            &#34;help&#34;: (
+                &#34;Probability of each feature vector along the time axis to be chosen as the start of the vector&#34;
+                &#34;span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature&#34;
+                &#34;vectors will be masked along the time axis.&#34;
+            )
+        },
+    )
+    mask_time_length: int = field(
+        default=10,
+        metadata={&#34;help&#34;: &#34;Length of vector span to mask along the time axis.&#34;},
+    )
+    mask_feature_prob: float = field(
+        default=0.0,
+        metadata={
+            &#34;help&#34;: (
+                &#34;Probability of each feature vector along the feature axis to be chosen as the start of the vectorspan&#34;
+                &#34; to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature&#34;
+                &#34; bins will be masked along the time axis.&#34;
+            )
+        },
+    )
+    mask_feature_length: int = field(
+        default=10,
+        metadata={&#34;help&#34;: &#34;Length of vector span to mask along the feature axis.&#34;},
+    )
+    layerdrop: float = field(
+        default=0.0, metadata={&#34;help&#34;: &#34;The LayerDrop probability.&#34;}
+    )
+    ctc_loss_reduction: Optional[str] = field(
+        default=&#34;mean&#34;,
+        metadata={
+            &#34;help&#34;: &#34;The way the ctc loss should be reduced. Should be one of &#39;mean&#39; or &#39;sum&#39;.&#34;
+        },
+    )
+    ctc_zero_infinity: bool = field(
+        default=False,
+        metadata={
+            &#34;help&#34;: &#34;Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. &#34;
+            &#34;Infinite losses mainly occur when the inputs are too short to be aligned to the targets. &#34;
+            &#34;Only relevant when training an instance of Wav2Vec2ForCTC.&#34;
+        },
+    )
+
+    def to_dict(self) -&gt; Dict[str, Any]:
+        result = dict(self.__dict__)
+        return result</code></pre>
+</details>
+<h3>Class variables</h3>
+<dl>
+<dt id="elpis.models.ModelArguments.activation_dropout"><code class="name">var <span class="ident">activation_dropout</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.attention_dropout"><code class="name">var <span class="ident">attention_dropout</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.cache_dir"><code class="name">var <span class="ident">cache_dir</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.ctc_loss_reduction"><code class="name">var <span class="ident">ctc_loss_reduction</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.ctc_zero_infinity"><code class="name">var <span class="ident">ctc_zero_infinity</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.feat_proj_dropout"><code class="name">var <span class="ident">feat_proj_dropout</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.final_dropout"><code class="name">var <span class="ident">final_dropout</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.freeze_feature_encoder"><code class="name">var <span class="ident">freeze_feature_encoder</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.hidden_dropout"><code class="name">var <span class="ident">hidden_dropout</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.layerdrop"><code class="name">var <span class="ident">layerdrop</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.mask_feature_length"><code class="name">var <span class="ident">mask_feature_length</span> : int</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.mask_feature_prob"><code class="name">var <span class="ident">mask_feature_prob</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.mask_time_length"><code class="name">var <span class="ident">mask_time_length</span> : int</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.mask_time_prob"><code class="name">var <span class="ident">mask_time_prob</span> : float</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.model_name_or_path"><code class="name">var <span class="ident">model_name_or_path</span> : str</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="elpis.models.ModelArguments.tokenizer_name_or_path"><code class="name">var <span class="ident">tokenizer_name_or_path</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="elpis.models.ModelArguments.to_dict"><code class="name flex">
+<span>def <span class="ident">to_dict</span></span>(<span>self) ‑> Dict[str, Any]</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def to_dict(self) -&gt; Dict[str, Any]:
+    result = dict(self.__dict__)
+    return result</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="elpis.models.Vocab"><code class="flex name class">
+<span>class <span class="ident">Vocab</span></span>
+<span>(</span><span>vocab: Dict[str, int])</span>
+</code></dt>
+<dd>
+<div class="desc"><p>A class which represents a dictionary of encountered tokens in a dataset.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@dataclass
+class Vocab:
+    &#34;&#34;&#34;A class which represents a dictionary of encountered tokens in a dataset.&#34;&#34;&#34;
+
+    vocab: Dict[str, int]
+
+    @property
+    def symbols(self) -&gt; Set[str]:
+        return set(self.vocab.keys())
+
+    def merge(self, other: &#34;Vocab&#34;) -&gt; &#34;Vocab&#34;:
+        &#34;&#34;&#34;Creates a new Vocab which includes all symbols in the merged two.&#34;&#34;&#34;
+        vocab = self.symbols | other.symbols
+        return Vocab.from_set(vocab)
+
+    def save(self, path: Path) -&gt; None:
+        &#34;&#34;&#34;Saves the vocab to the supplied path.
+
+        If the path is a folder, saves as vocab.json, within it.
+        &#34;&#34;&#34;
+        if path.is_dir():
+            path /= VOCAB_FILE
+
+        with open(path, &#34;w&#34;) as out:
+            json.dump(self.vocab, out)
+
+    def add(self, char: str) -&gt; None:
+        &#34;&#34;&#34;Adds a new character into the vocab.&#34;&#34;&#34;
+        if char in self.vocab:
+            return
+
+        self.vocab[char] = len(self.vocab)
+
+    def replace(self, original: str, replacement: str) -&gt; None:
+        &#34;&#34;&#34;Replaces the supplied character mapping in the vocab.&#34;&#34;&#34;
+        if original not in self.vocab or original == replacement:
+            return
+
+        self.vocab[replacement] = self.vocab[original]
+        self.vocab.pop(original)
+
+    @classmethod
+    def from_set(cls, symbols: Set[str]) -&gt; &#34;Vocab&#34;:
+        &#34;&#34;&#34;Builds a vocab from a set of symbols.&#34;&#34;&#34;
+        vocab = {symbol: index for index, symbol in enumerate(sorted(symbols))}
+        return cls(vocab=vocab)
+
+    @classmethod
+    def from_strings(cls, texts: Iterable[str]) -&gt; &#34;Vocab&#34;:
+        &#34;&#34;&#34;Builds an vocab from a iterable text collection.&#34;&#34;&#34;
+
+        def reducer(result: Set[str], text: str) -&gt; Set[str]:
+            return result | set(text)
+
+        symbols = reduce(reducer, texts, set())
+        return cls.from_set(symbols)</code></pre>
+</details>
+<h3>Class variables</h3>
+<dl>
+<dt id="elpis.models.Vocab.vocab"><code class="name">var <span class="ident">vocab</span> : Dict[str, int]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Static methods</h3>
+<dl>
+<dt id="elpis.models.Vocab.from_set"><code class="name flex">
+<span>def <span class="ident">from_set</span></span>(<span>symbols: Set[str]) ‑> <a title="elpis.models.vocab.Vocab" href="vocab.html#elpis.models.vocab.Vocab">Vocab</a></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Builds a vocab from a set of symbols.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def from_set(cls, symbols: Set[str]) -&gt; &#34;Vocab&#34;:
+    &#34;&#34;&#34;Builds a vocab from a set of symbols.&#34;&#34;&#34;
+    vocab = {symbol: index for index, symbol in enumerate(sorted(symbols))}
+    return cls(vocab=vocab)</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Vocab.from_strings"><code class="name flex">
+<span>def <span class="ident">from_strings</span></span>(<span>texts: Iterable[str]) ‑> <a title="elpis.models.vocab.Vocab" href="vocab.html#elpis.models.vocab.Vocab">Vocab</a></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Builds an vocab from a iterable text collection.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def from_strings(cls, texts: Iterable[str]) -&gt; &#34;Vocab&#34;:
+    &#34;&#34;&#34;Builds an vocab from a iterable text collection.&#34;&#34;&#34;
+
+    def reducer(result: Set[str], text: str) -&gt; Set[str]:
+        return result | set(text)
+
+    symbols = reduce(reducer, texts, set())
+    return cls.from_set(symbols)</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Instance variables</h3>
+<dl>
+<dt id="elpis.models.Vocab.symbols"><code class="name">var <span class="ident">symbols</span> : Set[str]</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@property
+def symbols(self) -&gt; Set[str]:
+    return set(self.vocab.keys())</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="elpis.models.Vocab.add"><code class="name flex">
+<span>def <span class="ident">add</span></span>(<span>self, char: str) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Adds a new character into the vocab.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def add(self, char: str) -&gt; None:
+    &#34;&#34;&#34;Adds a new character into the vocab.&#34;&#34;&#34;
+    if char in self.vocab:
+        return
+
+    self.vocab[char] = len(self.vocab)</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Vocab.merge"><code class="name flex">
+<span>def <span class="ident">merge</span></span>(<span>self, other: <a title="elpis.models.Vocab" href="#elpis.models.Vocab">Vocab</a>) ‑> <a title="elpis.models.vocab.Vocab" href="vocab.html#elpis.models.vocab.Vocab">Vocab</a></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Creates a new Vocab which includes all symbols in the merged two.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def merge(self, other: &#34;Vocab&#34;) -&gt; &#34;Vocab&#34;:
+    &#34;&#34;&#34;Creates a new Vocab which includes all symbols in the merged two.&#34;&#34;&#34;
+    vocab = self.symbols | other.symbols
+    return Vocab.from_set(vocab)</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Vocab.replace"><code class="name flex">
+<span>def <span class="ident">replace</span></span>(<span>self, original: str, replacement: str) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Replaces the supplied character mapping in the vocab.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def replace(self, original: str, replacement: str) -&gt; None:
+    &#34;&#34;&#34;Replaces the supplied character mapping in the vocab.&#34;&#34;&#34;
+    if original not in self.vocab or original == replacement:
+        return
+
+    self.vocab[replacement] = self.vocab[original]
+    self.vocab.pop(original)</code></pre>
+</details>
+</dd>
+<dt id="elpis.models.Vocab.save"><code class="name flex">
+<span>def <span class="ident">save</span></span>(<span>self, path: pathlib.Path) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Saves the vocab to the supplied path.</p>
+<p>If the path is a folder, saves as vocab.json, within it.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def save(self, path: Path) -&gt; None:
+    &#34;&#34;&#34;Saves the vocab to the supplied path.
+
+    If the path is a folder, saves as vocab.json, within it.
+    &#34;&#34;&#34;
+    if path.is_dir():
+        path /= VOCAB_FILE
+
+    with open(path, &#34;w&#34;) as out:
+        json.dump(self.vocab, out)</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
 </dl>
 </section>
 </article>
@@ -320,6 +1286,8 @@ def from_dict(cls, data: Dict[str, str]) -&gt; &#34;ElanOptions&#34;:
 <ul>
 <li><code><a title="elpis.models.annotation" href="annotation.html">elpis.models.annotation</a></code></li>
 <li><code><a title="elpis.models.elan_options" href="elan_options.html">elpis.models.elan_options</a></code></li>
+<li><code><a title="elpis.models.job" href="job.html">elpis.models.job</a></code></li>
+<li><code><a title="elpis.models.vocab" href="vocab.html">elpis.models.vocab</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
@@ -337,6 +1305,39 @@ def from_dict(cls, data: Dict[str, str]) -&gt; &#34;ElanOptions&#34;:
 </ul>
 </li>
 <li>
+<h4><code><a title="elpis.models.DataArguments" href="#elpis.models.DataArguments">DataArguments</a></code></h4>
+<ul class="">
+<li><code><a title="elpis.models.DataArguments.audio_column_name" href="#elpis.models.DataArguments.audio_column_name">audio_column_name</a></code></li>
+<li><code><a title="elpis.models.DataArguments.chars_to_explode" href="#elpis.models.DataArguments.chars_to_explode">chars_to_explode</a></code></li>
+<li><code><a title="elpis.models.DataArguments.chars_to_remove" href="#elpis.models.DataArguments.chars_to_remove">chars_to_remove</a></code></li>
+<li><code><a title="elpis.models.DataArguments.dataset_config_name" href="#elpis.models.DataArguments.dataset_config_name">dataset_config_name</a></code></li>
+<li><code><a title="elpis.models.DataArguments.dataset_name_or_path" href="#elpis.models.DataArguments.dataset_name_or_path">dataset_name_or_path</a></code></li>
+<li><code><a title="elpis.models.DataArguments.do_clean" href="#elpis.models.DataArguments.do_clean">do_clean</a></code></li>
+<li><code><a title="elpis.models.DataArguments.do_lower_case" href="#elpis.models.DataArguments.do_lower_case">do_lower_case</a></code></li>
+<li><code><a title="elpis.models.DataArguments.eval_metrics" href="#elpis.models.DataArguments.eval_metrics">eval_metrics</a></code></li>
+<li><code><a title="elpis.models.DataArguments.eval_split_name" href="#elpis.models.DataArguments.eval_split_name">eval_split_name</a></code></li>
+<li><code><a title="elpis.models.DataArguments.max_duration_in_seconds" href="#elpis.models.DataArguments.max_duration_in_seconds">max_duration_in_seconds</a></code></li>
+<li><code><a title="elpis.models.DataArguments.max_eval_samples" href="#elpis.models.DataArguments.max_eval_samples">max_eval_samples</a></code></li>
+<li><code><a title="elpis.models.DataArguments.max_train_samples" href="#elpis.models.DataArguments.max_train_samples">max_train_samples</a></code></li>
+<li><code><a title="elpis.models.DataArguments.min_duration_in_seconds" href="#elpis.models.DataArguments.min_duration_in_seconds">min_duration_in_seconds</a></code></li>
+<li><code><a title="elpis.models.DataArguments.overwrite_cache" href="#elpis.models.DataArguments.overwrite_cache">overwrite_cache</a></code></li>
+<li><code><a title="elpis.models.DataArguments.pad_token" href="#elpis.models.DataArguments.pad_token">pad_token</a></code></li>
+<li><code><a title="elpis.models.DataArguments.phoneme_language" href="#elpis.models.DataArguments.phoneme_language">phoneme_language</a></code></li>
+<li><code><a title="elpis.models.DataArguments.preprocessing_num_workers" href="#elpis.models.DataArguments.preprocessing_num_workers">preprocessing_num_workers</a></code></li>
+<li><code><a title="elpis.models.DataArguments.preprocessing_only" href="#elpis.models.DataArguments.preprocessing_only">preprocessing_only</a></code></li>
+<li><code><a title="elpis.models.DataArguments.stream_dataset" href="#elpis.models.DataArguments.stream_dataset">stream_dataset</a></code></li>
+<li><code><a title="elpis.models.DataArguments.text_column_name" href="#elpis.models.DataArguments.text_column_name">text_column_name</a></code></li>
+<li><code><a title="elpis.models.DataArguments.to_dict" href="#elpis.models.DataArguments.to_dict">to_dict</a></code></li>
+<li><code><a title="elpis.models.DataArguments.token" href="#elpis.models.DataArguments.token">token</a></code></li>
+<li><code><a title="elpis.models.DataArguments.train_split_name" href="#elpis.models.DataArguments.train_split_name">train_split_name</a></code></li>
+<li><code><a title="elpis.models.DataArguments.trust_remote_code" href="#elpis.models.DataArguments.trust_remote_code">trust_remote_code</a></code></li>
+<li><code><a title="elpis.models.DataArguments.unk_token" href="#elpis.models.DataArguments.unk_token">unk_token</a></code></li>
+<li><code><a title="elpis.models.DataArguments.use_auth_token" href="#elpis.models.DataArguments.use_auth_token">use_auth_token</a></code></li>
+<li><code><a title="elpis.models.DataArguments.word_delimiter_token" href="#elpis.models.DataArguments.word_delimiter_token">word_delimiter_token</a></code></li>
+<li><code><a title="elpis.models.DataArguments.words_to_remove" href="#elpis.models.DataArguments.words_to_remove">words_to_remove</a></code></li>
+</ul>
+</li>
+<li>
 <h4><code><a title="elpis.models.ElanOptions" href="#elpis.models.ElanOptions">ElanOptions</a></code></h4>
 <ul class="">
 <li><code><a title="elpis.models.ElanOptions.from_dict" href="#elpis.models.ElanOptions.from_dict">from_dict</a></code></li>
@@ -351,6 +1352,55 @@ def from_dict(cls, data: Dict[str, str]) -&gt; &#34;ElanOptions&#34;:
 <li><code><a title="elpis.models.ElanTierSelector.NAME" href="#elpis.models.ElanTierSelector.NAME">NAME</a></code></li>
 <li><code><a title="elpis.models.ElanTierSelector.ORDER" href="#elpis.models.ElanTierSelector.ORDER">ORDER</a></code></li>
 <li><code><a title="elpis.models.ElanTierSelector.TYPE" href="#elpis.models.ElanTierSelector.TYPE">TYPE</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="elpis.models.Job" href="#elpis.models.Job">Job</a></code></h4>
+<ul class="two-column">
+<li><code><a title="elpis.models.Job.data_args" href="#elpis.models.Job.data_args">data_args</a></code></li>
+<li><code><a title="elpis.models.Job.from_args" href="#elpis.models.Job.from_args">from_args</a></code></li>
+<li><code><a title="elpis.models.Job.from_dict" href="#elpis.models.Job.from_dict">from_dict</a></code></li>
+<li><code><a title="elpis.models.Job.from_json" href="#elpis.models.Job.from_json">from_json</a></code></li>
+<li><code><a title="elpis.models.Job.model_args" href="#elpis.models.Job.model_args">model_args</a></code></li>
+<li><code><a title="elpis.models.Job.parser" href="#elpis.models.Job.parser">parser</a></code></li>
+<li><code><a title="elpis.models.Job.save" href="#elpis.models.Job.save">save</a></code></li>
+<li><code><a title="elpis.models.Job.to_dict" href="#elpis.models.Job.to_dict">to_dict</a></code></li>
+<li><code><a title="elpis.models.Job.training_args" href="#elpis.models.Job.training_args">training_args</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="elpis.models.ModelArguments" href="#elpis.models.ModelArguments">ModelArguments</a></code></h4>
+<ul class="">
+<li><code><a title="elpis.models.ModelArguments.activation_dropout" href="#elpis.models.ModelArguments.activation_dropout">activation_dropout</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.attention_dropout" href="#elpis.models.ModelArguments.attention_dropout">attention_dropout</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.cache_dir" href="#elpis.models.ModelArguments.cache_dir">cache_dir</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.ctc_loss_reduction" href="#elpis.models.ModelArguments.ctc_loss_reduction">ctc_loss_reduction</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.ctc_zero_infinity" href="#elpis.models.ModelArguments.ctc_zero_infinity">ctc_zero_infinity</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.feat_proj_dropout" href="#elpis.models.ModelArguments.feat_proj_dropout">feat_proj_dropout</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.final_dropout" href="#elpis.models.ModelArguments.final_dropout">final_dropout</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.freeze_feature_encoder" href="#elpis.models.ModelArguments.freeze_feature_encoder">freeze_feature_encoder</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.hidden_dropout" href="#elpis.models.ModelArguments.hidden_dropout">hidden_dropout</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.layerdrop" href="#elpis.models.ModelArguments.layerdrop">layerdrop</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.mask_feature_length" href="#elpis.models.ModelArguments.mask_feature_length">mask_feature_length</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.mask_feature_prob" href="#elpis.models.ModelArguments.mask_feature_prob">mask_feature_prob</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.mask_time_length" href="#elpis.models.ModelArguments.mask_time_length">mask_time_length</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.mask_time_prob" href="#elpis.models.ModelArguments.mask_time_prob">mask_time_prob</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.model_name_or_path" href="#elpis.models.ModelArguments.model_name_or_path">model_name_or_path</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.to_dict" href="#elpis.models.ModelArguments.to_dict">to_dict</a></code></li>
+<li><code><a title="elpis.models.ModelArguments.tokenizer_name_or_path" href="#elpis.models.ModelArguments.tokenizer_name_or_path">tokenizer_name_or_path</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="elpis.models.Vocab" href="#elpis.models.Vocab">Vocab</a></code></h4>
+<ul class="two-column">
+<li><code><a title="elpis.models.Vocab.add" href="#elpis.models.Vocab.add">add</a></code></li>
+<li><code><a title="elpis.models.Vocab.from_set" href="#elpis.models.Vocab.from_set">from_set</a></code></li>
+<li><code><a title="elpis.models.Vocab.from_strings" href="#elpis.models.Vocab.from_strings">from_strings</a></code></li>
+<li><code><a title="elpis.models.Vocab.merge" href="#elpis.models.Vocab.merge">merge</a></code></li>
+<li><code><a title="elpis.models.Vocab.replace" href="#elpis.models.Vocab.replace">replace</a></code></li>
+<li><code><a title="elpis.models.Vocab.save" href="#elpis.models.Vocab.save">save</a></code></li>
+<li><code><a title="elpis.models.Vocab.symbols" href="#elpis.models.Vocab.symbols">symbols</a></code></li>
+<li><code><a title="elpis.models.Vocab.vocab" href="#elpis.models.Vocab.vocab">vocab</a></code></li>
 </ul>
 </li>
 </ul>
